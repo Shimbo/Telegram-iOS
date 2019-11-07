@@ -486,6 +486,8 @@ func fetchChatListHole(postbox: Postbox, network: Network, accountPeerId: PeerId
             for (groupId, summary) in fetchedChats.folderSummaries {
                 transaction.resetPeerGroupSummary(groupId: groupId, namespace: Namespaces.Message.Cloud, summary: summary)
             }
+            
+            fetchCirclePeers(postbox: postbox).start()
         })
     }
 }
