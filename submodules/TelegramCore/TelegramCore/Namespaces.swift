@@ -84,6 +84,7 @@ public struct Namespaces {
     
     public struct PeerGroup {
         public static let archive = PeerGroupId(rawValue: 1)
+        public static let circles = PeerGroupId(rawValue: 2)
     }
 }
 
@@ -163,6 +164,7 @@ private enum PreferencesKeyValues: Int32 {
     case searchBotsConfiguration = 15
     case contactsSettings = 16
     case secretChatSettings = 17
+    case circles = 314
 }
 
 public func applicationSpecificPreferencesKey(_ value: Int32) -> ValueBoxKey {
@@ -258,6 +260,11 @@ public struct PreferencesKeys {
     public static let secretChatSettings: ValueBoxKey = {
         let key = ValueBoxKey(length: 4)
         key.setInt32(0, value: PreferencesKeyValues.secretChatSettings.rawValue)
+        return key
+    }()
+    public static let circles: ValueBoxKey = {
+        let key = ValueBoxKey(length: 4)
+        key.setInt32(0, value: PreferencesKeyValues.circles.rawValue)
         return key
     }()
 }
