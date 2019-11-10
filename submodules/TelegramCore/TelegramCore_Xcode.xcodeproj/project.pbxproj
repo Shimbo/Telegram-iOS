@@ -29,6 +29,9 @@
 		09EDAD3A22131D010012A50B /* ManagedAutodownloadSettingsUpdates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09EDAD3922131D010012A50B /* ManagedAutodownloadSettingsUpdates.swift */; };
 		09FC986B22FD882200915E37 /* OutgoingScheduleInfoMessageAttribute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FC986A22FD882200915E37 /* OutgoingScheduleInfoMessageAttribute.swift */; };
 		09FC986D22FD99D400915E37 /* ScheduledMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FC986C22FD99D400915E37 /* ScheduledMessages.swift */; };
+		882BEB482377BF5A00E987C6 /* SwiftyJSON.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 882BEB472377BF5A00E987C6 /* SwiftyJSON.framework */; };
+		886CC83A2377262E00658B7D /* Alamofire.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 886CC8392377262E00658B7D /* Alamofire.framework */; };
+		886CC83B2377262E00658B7D /* Alamofire.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 886CC8392377262E00658B7D /* Alamofire.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		887D0E502372C6A600B62EC9 /* Circles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 887D0E4F2372C6A600B62EC9 /* Circles.swift */; };
 		887D0E512372C6AF00B62EC9 /* Circles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 887D0E4F2372C6A600B62EC9 /* Circles.swift */; };
 		889ECA5F2372519200FC1F03 /* CirclePeers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 889ECA5E2372519100FC1F03 /* CirclePeers.swift */; };
@@ -804,6 +807,20 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		886CC83C2377262E00658B7D /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				886CC83B2377262E00658B7D /* Alamofire.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		0900555521E4A96D0030924C /* Wallpaper.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Wallpaper.swift; sourceTree = "<group>"; };
 		09028385218E5DBB0067EFBD /* ManagedVoipConfigurationUpdates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedVoipConfigurationUpdates.swift; sourceTree = "<group>"; };
@@ -827,6 +844,8 @@
 		09EDAD3922131D010012A50B /* ManagedAutodownloadSettingsUpdates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedAutodownloadSettingsUpdates.swift; sourceTree = "<group>"; };
 		09FC986A22FD882200915E37 /* OutgoingScheduleInfoMessageAttribute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutgoingScheduleInfoMessageAttribute.swift; sourceTree = "<group>"; };
 		09FC986C22FD99D400915E37 /* ScheduledMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledMessages.swift; sourceTree = "<group>"; };
+		882BEB472377BF5A00E987C6 /* SwiftyJSON.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = SwiftyJSON.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		886CC8392377262E00658B7D /* Alamofire.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Alamofire.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		887D0E4F2372C6A600B62EC9 /* Circles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Circles.swift; sourceTree = "<group>"; };
 		889ECA5E2372519100FC1F03 /* CirclePeers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CirclePeers.swift; sourceTree = "<group>"; };
 		9F06830F21A40DEC001D8EDB /* NotificationExceptionsList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationExceptionsList.swift; sourceTree = "<group>"; };
@@ -1257,8 +1276,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				D0208AF42306E92B00A23503 /* libphonenumbermac.framework in Frameworks */,
+				886CC83A2377262E00658B7D /* Alamofire.framework in Frameworks */,
 				D0CC4ADC22BA47280088F36D /* TelegramApiMac.framework in Frameworks */,
 				D0B4187F1D7E054E004562A4 /* MtProtoKitMac.framework in Frameworks */,
+				882BEB482377BF5A00E987C6 /* SwiftyJSON.framework in Frameworks */,
 				D0B418721D7E0409004562A4 /* PostboxMac.framework in Frameworks */,
 				D0B418731D7E0409004562A4 /* SwiftSignalKitMac.framework in Frameworks */,
 			);
@@ -1698,6 +1719,8 @@
 		D06706631D512ADA00DED3E3 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				882BEB472377BF5A00E987C6 /* SwiftyJSON.framework */,
+				886CC8392377262E00658B7D /* Alamofire.framework */,
 				D0208AF32306E92B00A23503 /* libphonenumbermac.framework */,
 				D03E45D32305D44A0049C28B /* libphonenumber.framework */,
 				D03E45D02305D34C0049C28B /* libphonenumber_iOS.framework */,
@@ -2058,6 +2081,7 @@
 				D0B418631D7E03D5004562A4 /* Frameworks */,
 				D0B418641D7E03D5004562A4 /* Headers */,
 				D0B418651D7E03D5004562A4 /* Resources */,
+				886CC83C2377262E00658B7D /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
