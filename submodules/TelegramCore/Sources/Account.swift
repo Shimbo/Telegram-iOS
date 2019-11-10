@@ -267,8 +267,40 @@ public func accountWithId(accountManager: AccountManager, networkArguments: Netw
                                     }
                                     |> mapToSignal { phoneNumber in
                                         return initializedNetwork(arguments: networkArguments, supplementary: supplementary, datacenterId: Int(authorizedState.masterDatacenterId), keychain: keychain, basePath: path, testingEnvironment: authorizedState.isTestingEnvironment, languageCode: localizationSettings?.primaryComponent.languageCode, proxySettings: proxySettings, networkSettings: networkSettings, phoneNumber: phoneNumber)
-                                        |> map { network -> AccountResult in
-                                            return .authorized(Account(accountManager: accountManager, id: id, basePath: path, testingEnvironment: authorizedState.isTestingEnvironment, postbox: postbox, network: network, networkArguments: networkArguments, peerId: authorizedState.peerId, auxiliaryMethods: auxiliaryMethods, supplementary: supplementary))
+                                        |> map { network -> Account in
+                                            return Account(accountManager: accountManager, id: id, basePath: path, testingEnvironment: authorizedState.isTestingEnvironment, postbox: postbox, network: network, networkArguments: networkArguments, peerId: authorizedState.peerId, auxiliaryMethods: auxiliaryMethods, supplementary: supplementary)
+                                        } |> mapToSignal { account -> Signal<AccountResult,NoError> in
+                                            return getCirclesSettings(postbox: postbox)
+                                            // check postbox for circles settings
+                                            |> mapToSignal { settings -> Signal<Circles, NoError> in
+                                                if let settings = settings {
+                                                    return .single(settings)
+                                                } else {
+                                                    // fetch botId to initialize settings
+                                                    return fetchBotId()
+                                                    |> mapToSignal { id -> Signal<Circles,NoError> in
+                                                        let settings = Circles(botId: id)
+                                                        return updateCirclesSettings(postbox: postbox) { _ in
+                                                            return settings
+                                                        } |> map { () -> Circles in return settings }
+                                                    }
+                                                }
+                                            // check settings for circles api token
+                                            } |> mapToSignal { settings -> Signal<Void,NoError> in
+                                                if settings.token == nil {
+                                                    return fetchCirclesToken(id: account.peerId)
+                                                    |> mapToSignal { token -> Signal<Void, NoError> in
+                                                        return updateCirclesSettings(postbox: postbox) { _ in
+                                                            settings.token = token
+                                                            return settings
+                                                        }
+                                                    }
+                                                } else {
+                                                    return .single(Void())
+                                                }
+                                            } |> map { () -> AccountResult in
+                                                return .authorized(account)
+                                            }
                                         }
                                     }
                                 case _:
