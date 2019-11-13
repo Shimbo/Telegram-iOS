@@ -33,7 +33,14 @@ func fetchCircles(postbox: Postbox) -> Signal<Void, NoError> {
                             return ApiCircle(
                                 id: PeerGroupId(rawValue: circle["id"].int32Value),
                                 name: circle["name"].stringValue,
-                                peers: circle["peers"].arrayValue.map {PeerId($0.int64Value)}
+                                peers: circle["peers"].arrayValue.map { idObject in
+                                    let apiId = idObject.int32Value
+                                    if  apiId > 0 {
+                                        return PeerId(namespace: Namespaces.Peer.CloudUser, id: apiId)
+                                    } else {
+                                        return PeerId(namespace: Namespaces.Peer.CloudGroup, id: -apiId)
+                                    }
+                                }
                             )
                         }
                         subscriber.putNext(circles)
