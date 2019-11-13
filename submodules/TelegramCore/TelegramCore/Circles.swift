@@ -24,7 +24,7 @@ extension PeerGroupId: PostboxCoding {
 }
 
 public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
-    public static let baseApiUrl = "https://my-json-server.typicode.com/michaelenco/fakeapi/"
+    public static let baseApiUrl = "https://api.dev.randomcoffee.us/"
     public func isEqual(to: PreferencesEntry) -> Bool {
         if let to = to as? Circles {
             return self == to
