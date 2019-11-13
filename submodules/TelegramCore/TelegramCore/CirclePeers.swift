@@ -22,8 +22,11 @@ func fetchCircles(postbox: Postbox) -> Signal<Void, NoError> {
         if let token = settings?.token {
             return Signal<[ApiCircle], NoError> { subscriber in
                 
-                let urlString = Circles.baseApiUrl+"circles"
-                Alamofire.request(urlString).responseJSON { response in
+                let urlString = Circles.baseApiUrl
+                Alamofire.request(
+                    urlString,
+                    headers: ["Authorization": token]
+                ).responseJSON { response in
                     if let result = response.result.value {
                         let json = SwiftyJSON.JSON(result)
                         let circles = json["circles"].arrayValue.map { circle in
@@ -77,17 +80,14 @@ public func updateCirclesSettings(postbox: Postbox, _ f: @escaping(Circles?) -> 
 
 public func fetchCirclesToken(id: PeerId, requestToken: String = "") -> Signal<String?, NoError> {
     return Signal<String?, NoError> { subscriber in
-        let urlString = Circles.baseApiUrl+"token"
-        Alamofire.request(
-            urlString,
-            method: .post,
-            parameters: ["id": id.id, "token": requestToken],
-            encoding: JSONEncoding.default,
-            headers: nil
-        ).responseJSON { response in
+        let urlString = Circles.baseApiUrl+"login/"+String(id.id)
+        Alamofire.request(urlString).responseJSON { response in
             if let result = response.result.value {
                 let json = SwiftyJSON.JSON(result)
-                subscriber.putNext(json["token"].stringValue)
+                let token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE1NzcyMTIxNjcsImlzcyI6ImNpcmNsZXMtYXBpIiwiQ3JlZGVudGlhbHMiOnsiVGVsZWdyYW1Vc2VySWQiOjEzODgzNDc0Mn19.pZC3H_O7TU8MUTMJxwjsUlRb_QrmYptmZTK4gloQl2E"
+                //subscriber.putNext(json["token"].stringValue)
+                subscriber.putNext(token)
+                
             }
             subscriber.putCompletion()
         }
@@ -96,7 +96,7 @@ public func fetchCirclesToken(id: PeerId, requestToken: String = "") -> Signal<S
 }
 
 public func fetchBotId() -> Signal<PeerId, NoError> {
-    return Signal<PeerId, NoError> { subscriber in
+    /*return Signal<PeerId, NoError> { subscriber in
         let urlString = Circles.baseApiUrl+"bot_id"
         Alamofire.request(urlString).responseJSON { response in
             if let error = response.error {
@@ -110,5 +110,6 @@ public func fetchBotId() -> Signal<PeerId, NoError> {
             subscriber.putCompletion()
         }
         return EmptyDisposable
-    }
+    }*/
+    return .single(PeerId(871013339))
 }
