@@ -84,10 +84,7 @@ public func fetchCirclesToken(id: PeerId, requestToken: String = "") -> Signal<S
         Alamofire.request(urlString).responseJSON { response in
             if let result = response.result.value {
                 let json = SwiftyJSON.JSON(result)
-                let token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE1NzcyMTIxNjcsImlzcyI6ImNpcmNsZXMtYXBpIiwiQ3JlZGVudGlhbHMiOnsiVGVsZWdyYW1Vc2VySWQiOjEzODgzNDc0Mn19.pZC3H_O7TU8MUTMJxwjsUlRb_QrmYptmZTK4gloQl2E"
-                //subscriber.putNext(json["token"].stringValue)
-                subscriber.putNext(token)
-                
+                subscriber.putNext(json["token"].stringValue)
             }
             subscriber.putCompletion()
         }
