@@ -31,7 +31,6 @@
 		09FC986D22FD99D400915E37 /* ScheduledMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FC986C22FD99D400915E37 /* ScheduledMessages.swift */; };
 		882BEB482377BF5A00E987C6 /* SwiftyJSON.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 882BEB472377BF5A00E987C6 /* SwiftyJSON.framework */; };
 		886CC83A2377262E00658B7D /* Alamofire.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 886CC8392377262E00658B7D /* Alamofire.framework */; };
-		886CC83B2377262E00658B7D /* Alamofire.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 886CC8392377262E00658B7D /* Alamofire.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		887D0E502372C6A600B62EC9 /* Circles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 887D0E4F2372C6A600B62EC9 /* Circles.swift */; };
 		887D0E512372C6AF00B62EC9 /* Circles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 887D0E4F2372C6A600B62EC9 /* Circles.swift */; };
 		889ECA5F2372519200FC1F03 /* CirclePeers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 889ECA5E2372519100FC1F03 /* CirclePeers.swift */; };
@@ -806,20 +805,6 @@
 			remoteInfo = TelegramCore;
 		};
 /* End PBXContainerItemProxy section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		886CC83C2377262E00658B7D /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				886CC83B2377262E00658B7D /* Alamofire.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0900555521E4A96D0030924C /* Wallpaper.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Wallpaper.swift; sourceTree = "<group>"; };
@@ -2081,7 +2066,6 @@
 				D0B418631D7E03D5004562A4 /* Frameworks */,
 				D0B418641D7E03D5004562A4 /* Headers */,
 				D0B418651D7E03D5004562A4 /* Resources */,
-				886CC83C2377262E00658B7D /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
