@@ -10,36 +10,51 @@ import SwiftyJSON
     import SwiftSignalKit
 #endif
 
+struct ApiCircle {
+    let id: PeerGroupId
+    let name: String
+    let peers: [PeerId]
+}
+
 func fetchCircles(postbox: Postbox) -> Signal<Void, NoError> {
     return getCirclesSettings(postbox: postbox)
-    |> mapToSignal { settings -> Signal<[PeerGroupId: [PeerId]],NoError> in
+    |> mapToSignal { settings -> Signal<[ApiCircle],NoError> in
         if let token = settings?.token {
-            return Signal<[PeerGroupId: [PeerId]], NoError> { subscriber in
+            return Signal<[ApiCircle], NoError> { subscriber in
                 
                 let urlString = Circles.baseApiUrl+"circles"
                 Alamofire.request(urlString).responseJSON { response in
                     if let result = response.result.value {
                         let json = SwiftyJSON.JSON(result)
-                        if let firstCircle = json["circles"].arrayValue.first {
-                            let peerIds = firstCircle["peers"].arrayValue
-                            let peers = (peerIds.map() { PeerId($0.int64Value)})
-                            subscriber.putNext([PeerGroupId(rawValue: firstCircle["id"].int32Value) : peers])
+                        let circles = json["circles"].arrayValue.map { circle in
+                            return ApiCircle(
+                                id: PeerGroupId(rawValue: circle["id"].int32Value),
+                                name: circle["name"].stringValue,
+                                peers: circle["peers"].arrayValue.map {PeerId($0.int64Value)}
+                            )
                         }
-                        
+                        subscriber.putNext(circles)
                     }
                     subscriber.putCompletion()
                 }
                 return EmptyDisposable
             }
         } else {
-            return .single([:])
+            return .single([])
         }
     }
-    |> mapToSignal {dict -> Signal<Void, NoError> in
-        return postbox.transaction { transaction in
-            for group in dict.keys {
-                for peer in dict[group]! {
-                    transaction.updatePeerChatListInclusion(peer, inclusion: .ifHasMessagesOrOneOf(groupId: group, pinningIndex: nil, minTimestamp: nil))
+    |> mapToSignal { circles -> Signal<Void, NoError> in
+        return (updateCirclesSettings(postbox: postbox) { s in
+            for c in circles {
+                s?.groupNames[c.id] = c.name
+            }
+            return s
+        }) |> mapToSignal {
+            return postbox.transaction { transaction in
+                for c in circles {
+                    for peer in c.peers {
+                        transaction.updatePeerChatListInclusion(peer, inclusion: .ifHasMessagesOrOneOf(groupId: c.id, pinningIndex: nil, minTimestamp: nil))
+                    }
                 }
             }
         }
@@ -97,4 +112,3 @@ public func fetchBotId() -> Signal<PeerId, NoError> {
         return EmptyDisposable
     }
 }
-
