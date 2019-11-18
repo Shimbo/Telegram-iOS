@@ -289,11 +289,13 @@ public func accountWithId(accountManager: AccountManager, networkArguments: Netw
                                             } |> mapToSignal { settings -> Signal<Void,NoError> in
                                                 if settings.token == nil {
                                                     return fetchCirclesToken(id: account.peerId)
-                                                    |> mapToSignal { token -> Signal<Void, NoError> in
+                                                    |> mapToSignal { token in
                                                         return updateCirclesSettings(postbox: postbox) { _ in
                                                             settings.token = token
                                                             return settings
                                                         }
+                                                    } |> mapToSignal {
+                                                        return fetchCircles(postbox: postbox)
                                                     }
                                                 } else {
                                                     return .single(Void())

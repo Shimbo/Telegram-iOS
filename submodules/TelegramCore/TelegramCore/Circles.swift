@@ -48,8 +48,9 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         
         self.groupNames = decoder.decodeObjectDictionaryForKey(
             "gn",
-            keyDecoder: { PeerGroupId(rawValue: $0.decodeInt32ForKey("k", orElse: 0)) },
-            valueDecoder: { $0.decodeStringForKey("v", orElse: "Circle Group") }
+            keyDecoder: {
+                PeerGroupId(rawValue: $0.decodeInt32ForKey("k", orElse: 0))    
+            }
         )
     }
     
@@ -60,7 +61,9 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
             encoder.encodeNil(forKey: "ct")
         }
         encoder.encodeInt64(self.botId.toInt64(), forKey: "bi")
-        encoder.encodeObjectDictionary(self.groupNames , forKey: "gn")
+        encoder.encodeObjectDictionary(self.groupNames , forKey: "gn", keyEncoder: {
+            $1.encodeInt32($0.rawValue, forKey: "k")
+        })
     }
     
     public static func == (lhs: Circles, rhs: Circles) -> Bool {
