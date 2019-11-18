@@ -23,6 +23,15 @@ extension PeerGroupId: PostboxCoding {
     }
 }
 
+/*extension PeerId: PostboxCoding {
+    public func encode(_ encoder: PostboxEncoder) {
+        encoder.encodeInt64(self.toInt64(), forKey: "peerid")
+    }
+    public init(decoder: PostboxDecoder) {
+        self = PeerId(decoder.decodeInt64ForKey("peerid", orElse: 0))
+    }
+}*/
+
 public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     public static let baseApiUrl = "https://api.dev.randomcoffee.us/"
     public func isEqual(to: PreferencesEntry) -> Bool {
@@ -36,6 +45,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     public var token: String?
     public let botId: PeerId
     public var groupNames: Dictionary<PeerGroupId, String> = [:]
+    public var localInclusions: Dictionary<PeerId, PeerGroupId> = [:]
     
     
     public init(botId: PeerId) {
@@ -52,6 +62,12 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                 PeerGroupId(rawValue: $0.decodeInt32ForKey("k", orElse: 0))    
             }
         )
+        self.localInclusions = decoder.decodeObjectDictionaryForKey(
+            "li",
+            keyDecoder: {
+                PeerId($0.decodeInt64ForKey("k", orElse: 0))
+            }
+        )
     }
     
     public func encode(_ encoder: PostboxEncoder) {
@@ -63,6 +79,9 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         encoder.encodeInt64(self.botId.toInt64(), forKey: "bi")
         encoder.encodeObjectDictionary(self.groupNames , forKey: "gn", keyEncoder: {
             $1.encodeInt32($0.rawValue, forKey: "k")
+        })
+        encoder.encodeObjectDictionary(self.localInclusions , forKey: "li", keyEncoder: {
+            $1.encodeInt64($0.toInt64(), forKey: "k")
         })
     }
     

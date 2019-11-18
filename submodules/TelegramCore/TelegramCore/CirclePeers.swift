@@ -52,8 +52,7 @@ func fetchCircles(postbox: Postbox) -> Signal<Void, NoError> {
         } else {
             return .single([])
         }
-    }
-    |> mapToSignal { circles -> Signal<Void, NoError> in
+    } |> mapToSignal { circles -> Signal<Void, NoError> in
         return (updateCirclesSettings(postbox: postbox) { s in
             for c in circles {
                 s?.groupNames[c.id] = c.name
@@ -66,6 +65,26 @@ func fetchCircles(postbox: Postbox) -> Signal<Void, NoError> {
                         transaction.updatePeerChatListInclusion(peer, inclusion: .ifHasMessagesOrOneOf(groupId: c.id, pinningIndex: nil, minTimestamp: nil))
                     }
                 }
+            }
+        }
+    } |> mapToSignal { () -> Signal<Void, NoError> in
+        return getCirclesSettings(postbox: postbox)
+        |> mapToSignal { settings -> Signal<Void, NoError> in
+            if let settings = settings {
+                return postbox.transaction { transaction in
+                    for p in settings.localInclusions.keys {
+                        transaction.updatePeerChatListInclusion(
+                            p,
+                            inclusion: .ifHasMessagesOrOneOf(
+                                groupId: settings.localInclusions[p]!,
+                                pinningIndex: nil,
+                                minTimestamp: nil
+                            )
+                        )
+                    }
+                }
+            } else {
+                return .complete()
             }
         }
     }
