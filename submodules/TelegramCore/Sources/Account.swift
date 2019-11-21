@@ -295,7 +295,7 @@ public func accountWithId(accountManager: AccountManager, networkArguments: Netw
                                                             return settings
                                                         }
                                                     } |> mapToSignal {
-                                                        return fetchCircles(postbox: postbox)
+                                                        return fetchCircles(postbox: postbox, userId: account.peerId)
                                                     }
                                                 } else {
                                                     return .single(Void())

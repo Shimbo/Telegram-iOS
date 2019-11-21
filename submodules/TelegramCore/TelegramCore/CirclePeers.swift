@@ -16,12 +16,11 @@ struct ApiCircle {
     let peers: [PeerId]
 }
 
-func fetchCircles(postbox: Postbox) -> Signal<Void, NoError> {
+func fetchCircles(postbox: Postbox, userId: PeerId) -> Signal<Void, NoError> {
     return getCirclesSettings(postbox: postbox)
     |> mapToSignal { settings -> Signal<[ApiCircle],NoError> in
         if let token = settings?.token {
             return Signal<[ApiCircle], NoError> { subscriber in
-                
                 let urlString = Circles.baseApiUrl
                 Alamofire.request(
                     urlString,
@@ -29,18 +28,28 @@ func fetchCircles(postbox: Postbox) -> Signal<Void, NoError> {
                 ).responseJSON { response in
                     if let result = response.result.value {
                         let json = SwiftyJSON.JSON(result)
-                        let circles = json["circles"].arrayValue.map { circle in
+                        let circles:[ApiCircle] = json["circles"].arrayValue.map { circle in
+                            let idArray = circle["peers"].arrayValue + circle["members"].arrayValue
+                            let peers:[PeerId] = idArray
+                            .filter { $0.int32Value != userId.id }
+                            .map { idObject in
+                                let apiId = idObject.int64Value
+                                if  apiId > 0 {
+                                    return PeerId(namespace: Namespaces.Peer.CloudUser, id: idObject.int32Value)
+                                } else {
+                                    let trillion:Int64 = 1000000000000
+                                    if -apiId < trillion {
+                                        return PeerId(namespace: Namespaces.Peer.CloudGroup, id: PeerId.Id(-apiId))
+                                    } else {
+                                        return PeerId(namespace: Namespaces.Peer.CloudChannel, id: PeerId.Id(-apiId-trillion))
+                                    }
+                                    
+                                }
+                            }
                             return ApiCircle(
                                 id: PeerGroupId(rawValue: circle["id"].int32Value),
                                 name: circle["name"].stringValue,
-                                peers: circle["peers"].arrayValue.map { idObject in
-                                    let apiId = idObject.int32Value
-                                    if  apiId > 0 {
-                                        return PeerId(namespace: Namespaces.Peer.CloudUser, id: apiId)
-                                    } else {
-                                        return PeerId(namespace: Namespaces.Peer.CloudGroup, id: -apiId)
-                                    }
-                                }
+                                peers: peers
                             )
                         }
                         subscriber.putNext(circles)
