@@ -13,7 +13,7 @@ import SwiftyJSON
 struct ApiCircle {
     let id: PeerGroupId
     let name: String
-    let peers: [PeerId]
+    var peers: [PeerId]
 }
 
 func fetchCircles(postbox: Postbox, userId: PeerId) -> Signal<Void, NoError> {
@@ -51,6 +51,18 @@ func fetchCircles(postbox: Postbox, userId: PeerId) -> Signal<Void, NoError> {
                                 name: circle["name"].stringValue,
                                 peers: peers
                             )
+                        }
+                        
+                        for c1 in circles.sorted(by: { $0.id.rawValue < $1.id.rawValue}) {
+                            for p1 in c1.peers {
+                                for var c2 in circles {
+                                    if c1.id != c2.id {
+                                        if let idx = c2.peers.firstIndex(of: p1) {
+                                            c2.peers.remove(at: idx)
+                                        }
+                                    }
+                                }
+                            }
                         }
                         subscriber.putNext(circles)
                     }
