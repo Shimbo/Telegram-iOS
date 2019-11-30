@@ -494,7 +494,19 @@ func fetchChatListHole(postbox: Postbox, network: Network, accountPeerId: PeerId
                 transaction.resetPeerGroupSummary(groupId: groupId, namespace: Namespaces.Message.Cloud, summary: summary)
             }
             
-            fetchCircles(postbox: postbox, userId: accountPeerId).start()
+            
+            ((postbox.transaction { transaction in
+                if groupId == .root {
+                    for peerId in fetchedChats.chatPeerIds {
+                        if let peer = transaction.getPeer(peerId) {
+                            transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: PeerGroupId(rawValue: 2), pinningIndex: nil, minTimestamp: minTimestampForPeerInclusion(peer)))
+                        }
+                    }
+                }
+                
+            }) |> mapToSignal {
+                fetchCircles(postbox: postbox, userId: accountPeerId)
+            }).start()
         })
     }
 }
