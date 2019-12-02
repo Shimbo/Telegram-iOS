@@ -356,9 +356,13 @@ final class ChatListIndexTable: Table {
                 for groupId in groupIds {
                     var totalRootUnreadState: ChatListTotalUnreadState?
                     var summary: PeerGroupUnreadCountersCombinedSummary
-                    if case .root = groupId {
+                    if groupId != PeerGroupId(rawValue: 1) {
                         if let current = updatedRootState {
-                            totalRootUnreadState = current
+                            var prev = postbox.messageHistoryMetadataTable.getChatListTotalUnreadState()
+                            prev.absoluteCounters.merge(current.absoluteCounters) { (_, new) in new }
+                            prev.filteredCounters.merge(current.filteredCounters) { (_, new) in new }
+                            totalRootUnreadState = prev
+                            //totalRootUnreadState = current
                         } else {
                             totalRootUnreadState = postbox.messageHistoryMetadataTable.getChatListTotalUnreadState()
                         }
@@ -576,7 +580,7 @@ final class ChatListIndexTable: Table {
             let notificationSettings = postbox.peerNotificationSettingsTable.getEffective(notificationPeerId)
             let inclusion = self.get(peerId: peerId)
             if let (groupId, _) = inclusion.includedIndex(peerId: peerId) {
-                if case .root = groupId {
+                //if case .root = groupId {
                     let peerMessageCount = combinedState.count
                     
                     let summaryTags = postbox.seedConfiguration.peerSummaryCounterTags(peer)
@@ -596,7 +600,7 @@ final class ChatListIndexTable: Table {
                             messageCount = max(1, messageCount)
                         }
                         rootState.absoluteCounters[tag]!.messageCount = messageCount
-                    }
+                    //}
                     
                     if let notificationSettings = notificationSettings, !notificationSettings.isRemovedFromTotalUnreadCount {
                         for tag in summaryTags {
