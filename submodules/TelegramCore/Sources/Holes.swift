@@ -435,6 +435,7 @@ func fetchChatListHole(postbox: Postbox, network: Network, accountPeerId: PeerId
             |> ignoreValues
         }
         return withResolvedAssociatedMessages(postbox: postbox, source: .network(network), peers: Dictionary(fetchedChats.peers.map({ ($0.id, $0) }), uniquingKeysWith: { lhs, _ in lhs }), storeMessages: fetchedChats.storeMessages, { transaction, additionalPeers, additionalMessages in
+            
             updatePeers(transaction: transaction, peers: fetchedChats.peers + additionalPeers, update: { _, updated -> Peer in
                 return updated
             })
@@ -487,19 +488,32 @@ func fetchChatListHole(postbox: Postbox, network: Network, accountPeerId: PeerId
                 transaction.resetPeerGroupSummary(groupId: groupId, namespace: Namespaces.Message.Cloud, summary: summary)
             }
             
-            
-            ((postbox.transaction { transaction in
+            let signal = postbox.transaction { transaction in
                 if groupId == .root {
                     for peerId in fetchedChats.chatPeerIds {
                         if let peer = transaction.getPeer(peerId) {
                             transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: PeerGroupId(rawValue: 2), pinningIndex: nil, minTimestamp: minTimestampForPeerInclusion(peer)))
+                        } else {
+                            assertionFailure()
                         }
                     }
                 }
                 
-            }) |> mapToSignal {
-                fetchCircles(postbox: postbox, userId: accountPeerId)
-            }).start()
+                for (peerId, peerGroupId) in fetchedChats.peerGroupIds {
+                    if let peer = transaction.getPeer(peerId) {
+                        transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: peerGroupId == .root ? PeerGroupId(rawValue: 2) : peerGroupId, pinningIndex: nil, minTimestamp: minTimestampForPeerInclusion(peer)))
+                    } else {
+                        assertionFailure()
+                    }
+                }
+            } |> mapToSignal { fetchCircles(postbox: postbox, userId: accountPeerId) }
+            |> mapToSignal { circles in
+                return updatePeerCirclesInclusion(postbox: postbox, circles: circles)
+                |> mapToSignal {
+                    compromiseContacts(postbox: postbox, network: network, circles: circles)
+                }
+            }
+            _ = signal.start()
         })
     }
 }

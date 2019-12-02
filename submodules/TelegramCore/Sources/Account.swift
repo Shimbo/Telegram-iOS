@@ -294,15 +294,12 @@ public func accountWithId(accountManager: AccountManager, networkArguments: Netw
                                                             settings.token = token
                                                             return settings
                                                         }
-                                                    } |> mapToSignal {
-                                                        return fetchCircles(postbox: postbox, userId: account.peerId)
-                                                    }
+                                                    } |> mapToSignal { fetchCircles(postbox: postbox, userId: account.peerId) }
+                                                    |> mapToSignal { updatePeerCirclesInclusion(postbox: postbox, circles: $0) }
                                                 } else {
                                                     return .single(Void())
                                                 }
-                                            } |> map { () -> AccountResult in
-                                                return .authorized(account)
-                                            }
+                                            } |> map { .authorized(account) }
                                         }
                                     }
                                 case _:
