@@ -147,7 +147,10 @@ private func parseDialogs(apiDialogs: [Api.Dialog], apiMessages: [Api.Message], 
             case let .dialogFolder(dialogFolder):
                 switch dialogFolder.folder {
                     case let .folder(folder):
-                        referencedFolders[PeerGroupId(rawValue: folder.id)] = PeerGroupUnreadCountersSummary(all: PeerGroupUnreadCounters(messageCount: dialogFolder.unreadMutedMessagesCount, chatCount: dialogFolder.unreadMutedPeersCount))
+                        referencedFolders[PeerGroupId(rawValue: folder.id)] = PeerGroupUnreadCountersSummary(
+                            all: PeerGroupUnreadCounters(messageCount: dialogFolder.unreadMutedMessagesCount, chatCount: dialogFolder.unreadMutedPeersCount),
+                            filtered: PeerGroupUnreadCounters(messageCount: dialogFolder.unreadMutedMessagesCount, chatCount: dialogFolder.unreadMutedPeersCount)
+                        )
                 }
         }
     }
