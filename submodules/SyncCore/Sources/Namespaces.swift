@@ -163,7 +163,7 @@ private enum PreferencesKeyValues: Int32 {
     case secretChatSettings = 17
     case walletCollection = 18
     case contentSettings = 19
-    case circles = 314
+    case circlesSettings = 314
 }
 
 public func applicationSpecificPreferencesKey(_ value: Int32) -> ValueBoxKey {
@@ -262,7 +262,6 @@ public struct PreferencesKeys {
         key.setInt32(0, value: PreferencesKeyValues.secretChatSettings.rawValue)
         return key
     }()
-<<<<<<< HEAD:submodules/SyncCore/Sources/Namespaces.swift
     
     public static let walletCollection: ValueBoxKey = {
         let key = ValueBoxKey(length: 4)
@@ -273,11 +272,11 @@ public struct PreferencesKeys {
     public static let contentSettings: ValueBoxKey = {
         let key = ValueBoxKey(length: 4)
         key.setInt32(0, value: PreferencesKeyValues.contentSettings.rawValue)
-=======
-    public static let circles: ValueBoxKey = {
+        return key
+    }()
+    public static let circlesSettings: ValueBoxKey = {
         let key = ValueBoxKey(length: 4)
-        key.setInt32(0, value: PreferencesKeyValues.circles.rawValue)
->>>>>>> circles token in preferences:submodules/TelegramCore/TelegramCore/Namespaces.swift
+        key.setInt32(0, value: PreferencesKeyValues.circlesSettings.rawValue)
         return key
     }()
 }

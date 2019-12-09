@@ -360,7 +360,6 @@ final class ChatListIndexTable: Table {
             
             var updatedRootState: ChatListTotalUnreadState?
             var updatedTotalUnreadSummaries: [PeerGroupId: PeerGroupUnreadCountersCombinedSummary] = [:]
-            var updatedTotalUnreadSummariesFiltered: [PeerGroupId: PeerGroupUnreadCountersCombinedSummary] = [:]
             
             for peerId in alteredPeerIds {
                 guard let peer = postbox.peerTable.get(peerId) else {

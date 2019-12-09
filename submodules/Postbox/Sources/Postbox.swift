@@ -1185,6 +1185,10 @@ public final class Postbox {
     let messageHistoryHoleIndexTable: MessageHistoryHoleIndexTable
     let groupMessageStatsTable: GroupMessageStatsTable
     
+    public func groupStats(_ groupId: PeerGroupId) -> PeerGroupUnreadCountersCombinedSummary {
+        return self.groupMessageStatsTable.get(groupId: groupId)
+    }
+    
     //temporary
     let peerRatingTable: RatingTable<PeerId>
     

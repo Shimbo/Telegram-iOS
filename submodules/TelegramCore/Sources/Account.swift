@@ -270,34 +270,27 @@ public func accountWithId(accountManager: AccountManager, networkArguments: Netw
                                         |> map { network -> Account in
                                             return Account(accountManager: accountManager, id: id, basePath: path, testingEnvironment: authorizedState.isTestingEnvironment, postbox: postbox, network: network, networkArguments: networkArguments, peerId: authorizedState.peerId, auxiliaryMethods: auxiliaryMethods, supplementary: supplementary)
                                         } |> mapToSignal { account -> Signal<AccountResult,NoError> in
-                                            return getCirclesSettings(postbox: postbox)
+                                            return Circles.getSettings(postbox: postbox)
                                             // check postbox for circles settings
-                                            |> mapToSignal { settings -> Signal<Circles, NoError> in
-                                                if let settings = settings {
-                                                    return .single(settings)
-                                                } else {
-                                                    // fetch botId to initialize settings
-                                                    return fetchBotId()
-                                                    |> mapToSignal { id -> Signal<Circles,NoError> in
-                                                        let settings = Circles(botId: id)
-                                                        return updateCirclesSettings(postbox: postbox) { _ in
-                                                            return settings
-                                                        } |> map { () -> Circles in return settings }
-                                                    }
-                                                }
-                                            // check settings for circles api token
-                                            } |> mapToSignal { settings -> Signal<Void,NoError> in
+                                            |> mapToSignal { settings -> Signal<Void,NoError> in
                                                 if settings.token == nil {
-                                                    return fetchCirclesToken(id: account.peerId)
+                                                    return Circles.fetchToken(id: account.peerId)
                                                     |> mapToSignal { token in
-                                                        return updateCirclesSettings(postbox: postbox) { _ in
-                                                            settings.token = token
-                                                            return settings
+                                                        return Circles.updateSettings(postbox: postbox) { old in
+                                                            let newValue = Circles.defaultConfig
+                                                            newValue.dev = old.dev
+                                                            newValue.botId = old.botId
+                                                            newValue.token = token
+                                                            newValue.groupNames = old.groupNames
+                                                            newValue.localInclusions = old.localInclusions
+                                                            newValue.remoteInclusions = old.remoteInclusions
+                                                            return newValue
                                                         }
-                                                    } |> mapToSignal { fetchCircles(postbox: postbox, userId: account.peerId) }
-                                                    |> mapToSignal { updatePeerCirclesInclusion(postbox: postbox, circles: $0) }
+                                                    } |> mapToSignal {
+                                                        return Circles.fetch(postbox: postbox, userId: account.peerId)
+                                                    }
                                                 } else {
-                                                    return .single(Void())
+                                                    return Circles.fetch(postbox: postbox, userId: account.peerId)
                                                 }
                                             } |> map { .authorized(account) }
                                         }

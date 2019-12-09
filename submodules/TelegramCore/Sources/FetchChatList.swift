@@ -202,6 +202,7 @@ struct FetchedChatList {
     let pinnedItemIds: [PeerId]?
     let folderSummaries: [PeerGroupId: PeerGroupUnreadCountersSummary]
     let peerGroupIds: [PeerId: PeerGroupId]
+    let circlesSettings: Circles
 }
 
 func fetchChatList(postbox: Postbox, network: Network, location: FetchChatListLocation, upperBound: MessageIndex, hash: Int32, limit: Int32) -> Signal<FetchedChatList?, NoError> {
@@ -257,11 +258,12 @@ func fetchChatList(postbox: Postbox, network: Network, location: FetchChatListLo
             let requestChats = network.request(Api.functions.messages.getDialogs(flags: flags, folderId: requestFolderId, offsetDate: timestamp, offsetId: id, offsetPeer: peer, limit: limit, hash: hash))
             |> retryRequest
             
-            return combineLatest(requestChats, additionalPinnedChats)
-            |> mapToSignal { remoteChats, pinnedChats -> Signal<FetchedChatList?, NoError> in
-                if case .dialogsNotModified = remoteChats {
+            
+            return combineLatest(requestChats, additionalPinnedChats, Circles.settingsView(postbox: postbox))
+            |> mapToSignal { remoteChats, pinnedChats, circlesSettings -> Signal<FetchedChatList?, NoError> in
+                /*if case .dialogsNotModified = remoteChats {
                     return .single(nil)
-                }
+                }*/
                 let extractedRemoteDialogs = extractDialogsData(dialogs: remoteChats)
                 let parsedRemoteChats = parseDialogs(apiDialogs: extractedRemoteDialogs.apiDialogs, apiMessages: extractedRemoteDialogs.apiMessages, apiChats: extractedRemoteDialogs.apiChats, apiUsers: extractedRemoteDialogs.apiUsers, apiIsAtLowestBoundary: extractedRemoteDialogs.apiIsAtLowestBoundary)
                 var parsedPinnedChats: ParsedDialogs?
@@ -380,7 +382,8 @@ func fetchChatList(postbox: Postbox, network: Network, location: FetchChatListLo
                     
                         pinnedItemIds: pinnedItemIds,
                         folderSummaries: folderSummaries,
-                        peerGroupIds: peerGroupIds
+                        peerGroupIds: peerGroupIds,
+                        circlesSettings: circlesSettings
                     )
                 }
             }
