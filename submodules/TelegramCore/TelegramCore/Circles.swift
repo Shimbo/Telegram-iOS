@@ -43,7 +43,7 @@ extension PeerGroupId: PostboxCoding {
 }*/
 
 public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
-    public static let baseApiUrl = "https://api.dev.randomcoffee.us/"
+    public static let baseApiUrl = "https://api.circles.is/"
     public static let baseDevApiUrl = "https://api.dev.randomcoffee.us/"
     public static var defaultConfig:Circles {
         return Circles(botId: PeerId(namespace: 0, id: 871013339))
