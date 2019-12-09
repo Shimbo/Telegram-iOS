@@ -329,6 +329,15 @@ final class ChatListIndexTable: Table {
                     summary.all.messageCount += updatedCount - previousCount
                     summary.all.messageCount = max(0, summary.all.messageCount)
                 }
+                let prevUnread:Bool = previousState?.markedUnread ?? false
+                let updatedUnread:Bool = updatedState?.markedUnread ?? false
+                if prevUnread != updatedUnread {
+                    if prevUnread {
+                        summary.all.chatCount -= 1
+                    } else {
+                        summary.all.chatCount += 1
+                    }
+                }
                 
                 if previousCountFiltered != updatedCountFiltered {
                     if (previousCountFiltered != 0) != (updatedCountFiltered != 0) {
@@ -341,6 +350,15 @@ final class ChatListIndexTable: Table {
                     }
                     summary.filtered.messageCount += updatedCountFiltered - previousCountFiltered
                     summary.filtered.messageCount = max(0, summary.filtered.messageCount)
+                }
+                let prevFilteredUnread:Bool = previousStateFiltered?.markedUnread ?? false
+                let updatedFilteredUnread:Bool = updatedStateFiltered?.markedUnread ?? false
+                if prevFilteredUnread != updatedFilteredUnread {
+                    if prevUnread {
+                        summary.filtered.chatCount -= 1
+                    } else {
+                        summary.filtered.chatCount += 1
+                    }
                 }
             }
             
@@ -669,14 +687,14 @@ final class ChatListIndexTable: Table {
             if peerId.namespace == Int32.max {
                 return
             }
-            /*guard let peer = postbox.peerTable.get(peerId) else {
+            guard let peer = postbox.peerTable.get(peerId) else {
                 return
-            }*/
+            }
             guard let combinedState = postbox.readStateTable.getCombinedState(peerId) else {
                 return
             }
-            /*let notificationPeerId: PeerId = peer.associatedPeerId ?? peerId
-            let notificationSettings = postbox.peerNotificationSettingsTable.getEffective(notificationPeerId)*/
+            let notificationPeerId: PeerId = peer.associatedPeerId ?? peerId
+            let notificationSettings = postbox.peerNotificationSettingsTable.getEffective(notificationPeerId)
             let inclusion = self.get(peerId: peerId)
             if let (inclusionGroupId, _) = inclusion.includedIndex(peerId: peerId), inclusionGroupId == groupId {
                 for (namespace, state) in combinedState.states {
@@ -686,6 +704,17 @@ final class ChatListIndexTable: Table {
                     if state.count > 0 {
                         summary.namespaces[namespace]!.all.chatCount += 1
                         summary.namespaces[namespace]!.all.messageCount += state.count
+                        
+                        if let settings = notificationSettings, !settings.isRemovedFromTotalUnreadCount {
+                            summary.namespaces[namespace]!.filtered.chatCount += 1
+                            summary.namespaces[namespace]!.filtered.messageCount += state.count
+                        }
+                    }
+                    if state.markedUnread {
+                        summary.namespaces[namespace]!.all.chatCount += 1
+                        if let settings = notificationSettings, !settings.isRemovedFromTotalUnreadCount {
+                            summary.namespaces[namespace]!.filtered.chatCount += 1
+                        }
                     }
                 }
             }
