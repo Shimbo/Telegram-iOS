@@ -68,6 +68,7 @@ private var declaredEncodables: Void = {
     declareEncodable(GlobalNotificationSettings.self, f: { GlobalNotificationSettings(decoder: $0) })
     declareEncodable(Circles.self, f: { Circles(decoder: $0) })
     declareEncodable(String.self, f: { String(decoder: $0) })
+    declareEncodable(Int32.self, f: { String(decoder: $0) })
     declareEncodable(PeerGroupId.self, f: { PeerGroupId(decoder: $0) })
     declareEncodable(CloudChatRemoveChatOperation.self, f: { CloudChatRemoveChatOperation(decoder: $0) })
     declareEncodable(SynchronizePinnedChatsOperation.self, f: { SynchronizePinnedChatsOperation(decoder: $0) })
