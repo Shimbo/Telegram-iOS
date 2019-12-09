@@ -496,28 +496,16 @@ func fetchChatListHole(postbox: Postbox, network: Network, accountPeerId: PeerId
             }
             
             let signal = postbox.transaction { transaction in
-                if groupId == .root {
-                    for peerId in fetchedChats.chatPeerIds {
-                        if let peer = transaction.getPeer(peerId) {
-                            transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: PeerGroupId(rawValue: 2), pinningIndex: nil, minTimestamp: minTimestampForPeerInclusion(peer)))
-                        } else {
-                            assertionFailure()
-                        }
-                    }
-                }
-                
-                for (peerId, peerGroupId) in fetchedChats.peerGroupIds {
-                    if let peer = transaction.getPeer(peerId) {
-                        transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: peerGroupId == .root ? PeerGroupId(rawValue: 2) : peerGroupId, pinningIndex: nil, minTimestamp: minTimestampForPeerInclusion(peer)))
-                    } else {
-                        assertionFailure()
-                    }
-                }
-            } |> mapToSignal { fetchCircles(postbox: postbox, userId: accountPeerId) }
-            |> mapToSignal { circles in
-                return updatePeerCirclesInclusion(postbox: postbox, circles: circles)
-                |> mapToSignal {
-                    compromiseContacts(postbox: postbox, network: network, circles: circles)
+                transaction.recalculateChatListGroupStats(groupId: .root)
+                for p in fetchedChats.circlesSettings.inclusions.keys {
+                    transaction.updatePeerChatListInclusion(
+                        p,
+                        inclusion: .ifHasMessagesOrOneOf(
+                            groupId: fetchedChats.circlesSettings.inclusions[p]!,
+                            pinningIndex: nil,
+                            minTimestamp: nil
+                        )
+                    )
                 }
             }
             _ = signal.start()
