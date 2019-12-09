@@ -15,6 +15,14 @@ extension String: PostboxCoding {
         self = decoder.decodeStringForKey("s", orElse: "")
     }
 }
+extension Int32: PostboxCoding {
+    public func encode(_ encoder: PostboxEncoder) {
+        encoder.encodeInt32(self, forKey: "i")
+    }
+    public init(decoder: PostboxDecoder) {
+        self = decoder.decodeInt32ForKey("i", orElse: Int32(0))
+    }
+}
 
 extension PeerGroupId: PostboxCoding {
     public func encode(_ encoder: PostboxEncoder) {
@@ -45,6 +53,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         let id: PeerGroupId
         let name: String
         var peers: [PeerId]
+        var index: Int
     }
 
     public static func getSettings(postbox: Postbox) -> Signal<Circles, NoError> {
@@ -205,9 +214,13 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                 newValue.localInclusions = old.localInclusions
                 newValue.remoteInclusions = old.remoteInclusions
                 for c in circles {
+                    newValue.index[c.id] = Int32(c.index)
                     newValue.groupNames[c.id] = c.name
                     for peer in c.peers {
-                        newValue.remoteInclusions[peer] = c.id
+                        if peer != userId {
+                            newValue.remoteInclusions[peer] = c.id
+                            
+                        }
                     }
                 }
                 return newValue
@@ -229,6 +242,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     public var remoteInclusions: Dictionary<PeerId, PeerGroupId> = [:]
     public var localInclusions: Dictionary<PeerId, PeerGroupId> = [:]
     public var dev: Bool
+    public var index: Dictionary<PeerGroupId, Int32> = [:]
     
     public var inclusions: Dictionary<PeerId, PeerGroupId> {
         return self.remoteInclusions.merging(self.localInclusions) { $1 }
@@ -248,6 +262,12 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         self.token = decoder.decodeOptionalStringForKey("ct")
         self.botId = PeerId(decoder.decodeInt64ForKey("bi", orElse: 1234))
         
+        self.index = decoder.decodeObjectDictionaryForKey(
+            "i",
+            keyDecoder: {
+                PeerGroupId(rawValue: $0.decodeInt32ForKey("k", orElse: 0))
+            }
+        )
         self.groupNames = decoder.decodeObjectDictionaryForKey(
             "gn",
             keyDecoder: {
@@ -279,6 +299,9 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         encoder.encodeObjectDictionary(self.groupNames , forKey: "gn", keyEncoder: {
             $1.encodeInt32($0.rawValue, forKey: "k")
         })
+        encoder.encodeObjectDictionary(self.index , forKey: "i", keyEncoder: {
+            $1.encodeInt32($0.rawValue, forKey: "k")
+        })
         encoder.encodeObjectDictionary(self.localInclusions , forKey: "li", keyEncoder: {
             $1.encodeInt64($0.toInt64(), forKey: "k")
         })
@@ -288,7 +311,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     }
     
     public static func == (lhs: Circles, rhs: Circles) -> Bool {
-        return lhs.token == rhs.token && lhs.dev == rhs.dev && lhs.groupNames == rhs.groupNames && lhs.localInclusions == rhs.localInclusions && lhs.remoteInclusions == rhs.remoteInclusions
+        return lhs.token == rhs.token && lhs.dev == rhs.dev && lhs.groupNames == rhs.groupNames && lhs.localInclusions == rhs.localInclusions && lhs.remoteInclusions == rhs.remoteInclusions && lhs.index == rhs.index
     }
 }
 

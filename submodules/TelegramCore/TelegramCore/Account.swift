@@ -419,6 +419,7 @@ public func accountWithId(accountManager: AccountManager, networkArguments: Netw
                                                             newValue.groupNames = old.groupNames
                                                             newValue.localInclusions = old.localInclusions
                                                             newValue.remoteInclusions = old.remoteInclusions
+                                                            newValue.index = old.index
                                                             return newValue
                                                         }
                                                     } |> mapToSignal {
