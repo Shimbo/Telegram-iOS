@@ -1,6 +1,4 @@
 import Foundation
-import Alamofire
-import SwiftyJSON
 #if os(macOS)
     import PostboxMac
 #else
@@ -102,13 +100,29 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     public static func fetchToken(id: PeerId, requestToken: String = "") -> Signal<String?, NoError> {
         return Signal<String?, NoError> { subscriber in
             let urlString = Circles.baseApiUrl+"login/"+String(id.id)
-            Alamofire.request(urlString).responseJSON { response in
-                if let result = response.result.value {
-                    let json = SwiftyJSON.JSON(result)
-                    subscriber.putNext(json["token"].stringValue)
+            
+            let url = URL(string: urlString)!
+            var request = URLRequest(url: url)
+            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+                guard let data = data,
+                    let response = response as? HTTPURLResponse,
+                    error == nil else {
+                        subscriber.putCompletion()
+                        return
+                    }
+                guard (200 ... 299) ~= response.statusCode else {
+                    subscriber.putCompletion()
+                    return
+                }
+
+                if case let .dictionary(json) = JSON(data: data) {
+                    if case let .string(token) = json["token"] {
+                        subscriber.putNext(token)
+                    }
                 }
                 subscriber.putCompletion()
             }
+            task.resume()
             return EmptyDisposable
         }
     }
@@ -118,42 +132,64 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         |> mapToSignal { settings -> Signal<[ApiCircle],NoError> in
             if let token = settings.token {
                 return Signal<[ApiCircle], NoError> { subscriber in
-                    let urlString = settings.url
-                    Alamofire.request(
-                        urlString,
-                        headers: ["Authorization": token]
-                    ).responseJSON { response in
-                        if let result = response.result.value {
-                            let json = SwiftyJSON.JSON(result)
-                            var circles:[ApiCircle] = json["circles"].arrayValue.map { circle in
-                                let idArray = circle["peers"].arrayValue + circle["members"].arrayValue
-                                let peers:[PeerId] = idArray
-                                .map { parseBotApiPeerId($0.int64Value) }
-                                .filter { $0 != userId }
-
-                                return ApiCircle(
-                                    id: PeerGroupId(rawValue: circle["id"].int32Value),
-                                    name: circle["name"].stringValue,
-                                    peers: peers
-                                )
+                    let urlString = Circles.baseApiUrl
+                    let url = URL(string: urlString)!
+                    var request = URLRequest(url: url)
+                    request.setValue(token, forHTTPHeaderField: "Authorization")
+                    let task = URLSession.shared.dataTask(with: request) {data, response, error in
+                        guard let data = data,
+                            let response = response as? HTTPURLResponse,
+                            error == nil else {
+                                subscriber.putCompletion()
+                                return
                             }
-                            
-                            removePeerDuplicates(&circles)
-                            for c1 in circles.sorted(by: { $0.id.rawValue < $1.id.rawValue}) {
-                                for p1 in c1.peers {
-                                    for var c2 in circles {
-                                        if c1.id != c2.id {
-                                            if let idx = c2.peers.firstIndex(of: p1) {
-                                                c2.peers.remove(at: idx)
-                                            }
+                        guard (200 ... 299) ~= response.statusCode else {
+                            subscriber.putCompletion()
+                            return
+                        }
+                        var apiCircles:[ApiCircle] = []
+                        if case let .dictionary(json) = JSON(data: data) {
+                            if case let .array(circles) = json["circles"] {
+                                for (index, circle) in circles.enumerated() {
+                                    if case let .dictionary(circle) = circle {
+                                        if case let .number(id) = circle["id"],
+                                            case let .string(name) = circle["name"],
+                                            case let .array(peers) = circle["peers"],
+                                            case let .array(members) = circle["members"] {
+                                            
+                                            apiCircles.append(ApiCircle(
+                                                id: PeerGroupId(rawValue: Int32(id)),
+                                                name: name,
+                                                peers: (peers+members).compactMap { p -> PeerId? in
+                                                    if case let .number(id) = p {
+                                                        return parseBotApiPeerId(Int64(id))
+                                                    } else {
+                                                        return nil
+                                                    }
+                                                },
+                                                index: index
+                                            ))
                                         }
                                     }
                                 }
                             }
-                            subscriber.putNext(circles)
                         }
+                        removePeerDuplicates(&apiCircles)
+                        for c1 in apiCircles.sorted(by: { $0.id.rawValue < $1.id.rawValue}) {
+                            for p1 in c1.peers {
+                                for var c2 in apiCircles {
+                                    if c1.id != c2.id {
+                                        if let idx = c2.peers.firstIndex(of: p1) {
+                                            c2.peers.remove(at: idx)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        subscriber.putNext(apiCircles)
                         subscriber.putCompletion()
                     }
+                    task.resume()
                     return EmptyDisposable
                 }
             } else {
