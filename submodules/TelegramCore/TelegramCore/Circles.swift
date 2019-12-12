@@ -192,18 +192,18 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                                 }
                             }
                         }
-                        removePeerDuplicates(&apiCircles)
-                        for c1 in apiCircles.sorted(by: { $0.id.rawValue < $1.id.rawValue}) {
+                        for (c1idx, c1) in apiCircles.sorted(by: { $0.index < $1.index}).enumerated() {
                             for p1 in c1.peers {
-                                for var c2 in apiCircles {
-                                    if c1.id != c2.id {
-                                        if let idx = c2.peers.firstIndex(of: p1) {
-                                            c2.peers.remove(at: idx)
+                                for var (c2idx, c2) in apiCircles.enumerated() {
+                                    if c1.id != c2.id && c1idx < c2idx {
+                                        if let idx = apiCircles[c2idx].peers.firstIndex(of: p1) {
+                                            apiCircles[c2idx].peers.remove(at: idx)
                                         }
                                     }
                                 }
                             }
                         }
+
                         subscriber.putNext(apiCircles)
                         subscriber.putCompletion()
                     }
@@ -337,19 +337,3 @@ func parseBotApiPeerId(_ apiId: Int64) -> PeerId {
         
     }
 }
-
-func removePeerDuplicates(_ circles: inout [Circles.ApiCircle]) {
-    for c1 in circles.sorted(by: { $0.id.rawValue < $1.id.rawValue}) {
-        for p1 in c1.peers {
-            for var c2 in circles {
-                if c1.id != c2.id {
-                    if let idx = c2.peers.firstIndex(of: p1) {
-                        c2.peers.remove(at: idx)
-                    }
-                }
-            }
-        }
-    }
-}
-
-
