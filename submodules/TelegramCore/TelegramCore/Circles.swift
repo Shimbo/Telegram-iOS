@@ -106,33 +106,40 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         }*/
         return .single(PeerId(namespace: 0, id: 871013339))
     }
-    public static func fetchToken(id: PeerId, requestToken: String = "") -> Signal<String?, NoError> {
-        return Signal<String?, NoError> { subscriber in
-            let urlString = Circles.baseApiUrl+"login/"+String(id.id)
-            
-            let url = URL(string: urlString)!
-            var request = URLRequest(url: url)
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                guard let data = data,
-                    let response = response as? HTTPURLResponse,
-                    error == nil else {
+    public static func fetchToken(postbox: Postbox, id: PeerId, requestToken: String = "") -> Signal<String?, NoError> {
+        return Circles.getSettings(postbox: postbox)
+        |> mapToSignal { settings in
+            return Signal<String?, NoError> { subscriber in
+                let urlString = settings.url+"login/"+String(id.id)
+                
+                let url = URL(string: urlString)!
+                var request = URLRequest(url: url)
+                let task = URLSession.shared.dataTask(with: request) { data, response, error in
+                    guard let data = data,
+                        let response = response as? HTTPURLResponse,
+                        error == nil else {
+                            subscriber.putNext(nil)
+                            subscriber.putCompletion()
+                            return
+                        }
+                    guard (200 ... 299) ~= response.statusCode else {
+                        subscriber.putNext(nil)
                         subscriber.putCompletion()
                         return
                     }
-                guard (200 ... 299) ~= response.statusCode else {
-                    subscriber.putCompletion()
-                    return
-                }
 
-                if case let .dictionary(json) = JSON(data: data) {
-                    if case let .string(token) = json["token"] {
-                        subscriber.putNext(token)
+                    if case let .dictionary(json) = JSON(data: data) {
+                        if case let .string(token) = json["token"] {
+                            subscriber.putNext(token)
+                        }
+                    } else {
+                        subscriber.putNext(nil)
                     }
+                    subscriber.putCompletion()
                 }
-                subscriber.putCompletion()
+                task.resume()
+                return EmptyDisposable
             }
-            task.resume()
-            return EmptyDisposable
         }
     }
     
@@ -141,7 +148,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         |> mapToSignal { settings -> Signal<[ApiCircle],NoError> in
             if let token = settings.token {
                 return Signal<[ApiCircle], NoError> { subscriber in
-                    let urlString = Circles.baseApiUrl
+                    let urlString = settings.url
                     let url = URL(string: urlString)!
                     var request = URLRequest(url: url)
                     request.setValue(token, forHTTPHeaderField: "Authorization")
@@ -149,10 +156,12 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                         guard let data = data,
                             let response = response as? HTTPURLResponse,
                             error == nil else {
+                                subscriber.putNext([])
                                 subscriber.putCompletion()
                                 return
                             }
                         guard (200 ... 299) ~= response.statusCode else {
+                            subscriber.putNext([])
                             subscriber.putCompletion()
                             return
                         }
