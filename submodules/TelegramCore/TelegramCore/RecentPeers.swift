@@ -25,7 +25,7 @@ final class CachedRecentPeers: PostboxCoding {
     
     init(decoder: PostboxDecoder) {
         self.enabled = decoder.decodeInt32ForKey("enabled", orElse: 0) != 0
-        self.ids = decoder.decodeInt64ArrayForKey("ids").map(PeerId.init)
+        self.ids = decoder.decodeInt64ArrayForKey("ids").map { PeerId($0) }
     }
     
     func encode(_ encoder: PostboxEncoder) {

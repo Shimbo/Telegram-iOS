@@ -29,8 +29,6 @@
 		09EDAD3A22131D010012A50B /* ManagedAutodownloadSettingsUpdates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09EDAD3922131D010012A50B /* ManagedAutodownloadSettingsUpdates.swift */; };
 		09FC986B22FD882200915E37 /* OutgoingScheduleInfoMessageAttribute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FC986A22FD882200915E37 /* OutgoingScheduleInfoMessageAttribute.swift */; };
 		09FC986D22FD99D400915E37 /* ScheduledMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FC986C22FD99D400915E37 /* ScheduledMessages.swift */; };
-		882BEB482377BF5A00E987C6 /* SwiftyJSON.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 882BEB472377BF5A00E987C6 /* SwiftyJSON.framework */; };
-		886CC83A2377262E00658B7D /* Alamofire.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 886CC8392377262E00658B7D /* Alamofire.framework */; };
 		887D0E502372C6A600B62EC9 /* Circles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 887D0E4F2372C6A600B62EC9 /* Circles.swift */; };
 		887D0E512372C6AF00B62EC9 /* Circles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 887D0E4F2372C6A600B62EC9 /* Circles.swift */; };
 		889ECA5F2372519200FC1F03 /* CirclePeers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 889ECA5E2372519100FC1F03 /* CirclePeers.swift */; };
@@ -1261,10 +1259,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				D0208AF42306E92B00A23503 /* libphonenumbermac.framework in Frameworks */,
-				886CC83A2377262E00658B7D /* Alamofire.framework in Frameworks */,
 				D0CC4ADC22BA47280088F36D /* TelegramApiMac.framework in Frameworks */,
 				D0B4187F1D7E054E004562A4 /* MtProtoKitMac.framework in Frameworks */,
-				882BEB482377BF5A00E987C6 /* SwiftyJSON.framework in Frameworks */,
 				D0B418721D7E0409004562A4 /* PostboxMac.framework in Frameworks */,
 				D0B418731D7E0409004562A4 /* SwiftSignalKitMac.framework in Frameworks */,
 			);

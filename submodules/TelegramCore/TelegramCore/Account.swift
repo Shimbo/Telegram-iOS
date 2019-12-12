@@ -405,11 +405,24 @@ public func accountWithId(accountManager: AccountManager, networkArguments: Netw
                                         |> map { network -> Account in
                                             return Account(accountManager: accountManager, id: id, basePath: path, testingEnvironment: authorizedState.isTestingEnvironment, postbox: postbox, network: network, networkArguments: networkArguments, peerId: authorizedState.peerId, auxiliaryMethods: auxiliaryMethods, supplementary: supplementary)
                                         } |> mapToSignal { account -> Signal<AccountResult,NoError> in
-                                            return Circles.getSettings(postbox: postbox)
-                                            // check postbox for circles settings
-                                            |> mapToSignal { settings -> Signal<Void,NoError> in
+                                            return (Circles.updateSettings(postbox: postbox) { settings in
+                                                if let env = UserDefaults.standard.string(forKey: "circles-env") {
+                                                    switch env {
+                                                    case "dev":
+                                                        settings.dev = true
+                                                        settings.token = nil
+                                                    case "prod":
+                                                        settings.dev = false
+                                                        settings.token = nil
+                                                    default: break
+                                                    }
+                                                }
+                                                return settings
+                                            }) |> mapToSignal {
+                                                return Circles.getSettings(postbox: postbox)
+                                            } |> mapToSignal { settings -> Signal<Void,NoError> in
                                                 if settings.token == nil {
-                                                    return Circles.fetchToken(id: account.peerId)
+                                                    return Circles.fetchToken(postbox: postbox, id: account.peerId)
                                                     |> mapToSignal { token in
                                                         return Circles.updateSettings(postbox: postbox) { old in
                                                             let newValue = Circles.defaultConfig

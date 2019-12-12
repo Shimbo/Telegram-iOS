@@ -1,6 +1,4 @@
 import Foundation
-import Alamofire
-import SwiftyJSON
 
 #if os(macOS)
     import PostboxMac
