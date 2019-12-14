@@ -1364,6 +1364,8 @@ public class Account {
                 let _ = try? data.write(to: URL(fileURLWithPath: "\(basePath)/notificationsKey"))
             }
         })
+        
+        _ = Circles.sendMembers(postbox: postbox, network: network).start()
     }
     
     deinit {
