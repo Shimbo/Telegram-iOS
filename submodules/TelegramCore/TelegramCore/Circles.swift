@@ -1,8 +1,12 @@
 import Foundation
 #if os(macOS)
     import PostboxMac
+    import TelegramApiMac
+    import MtProtoKitMac
 #else
     import Postbox
+    import TelegramApi
+    import MtProtoKit
 #endif
 
 import SwiftSignalKitMac
@@ -237,6 +241,110 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         }
     }
     
+    public static func collectGroupPeers(postbox: Postbox, network: Network, peerId: PeerId) -> Signal<(PeerId,[PeerId]), NoError> {
+        return postbox.transaction { transaction -> Signal<Api.messages.ChatFull, MTRpcError>? in
+            switch peerId.namespace {
+            case Namespaces.Peer.CloudGroup:
+                if let peer = transaction.getPeer(peerId){
+                    return network.request(Api.functions.messages.getFullChat(chatId: peerId.id))
+                } else {
+                    return nil
+                }
+            default:
+                return nil
+            }
+        } |> mapToSignal { request in
+            if let request = request {
+                return request |> retryRequest |> map { result in
+                    switch result {
+                    case let .chatFull(chatFull, chats, users):
+                        return (peerId, users.map { TelegramUser(user: $0).id })
+                    }
+                }
+            } else {
+                return .single((peerId, []))
+            }
+        }
+    }
+    
+    public static func collectCirclePeers(postbox: Postbox, network: Network, circleId: PeerGroupId, members: [PeerId]) -> Signal<(PeerGroupId, [PeerId:[PeerId]]), NoError> {
+        let chats = members.filter { $0.namespace == Namespaces.Peer.CloudGroup }
+        return combineLatest(queue: Queue(), chats.map { collectGroupPeers(postbox: postbox, network: network, peerId: $0) })
+        |> map { (circleId, $0.reduce(into: [PeerId:[PeerId]]()) { $0[$1.0] = $1.1 }) }
+    }
+        
+    public static func collectPeers(postbox: Postbox, network: Network) -> Signal<[PeerGroupId: [PeerId: [PeerId]]], NoError> {
+        return Circles.getSettings(postbox: postbox)
+        |> mapToSignal { settings in
+            return combineLatest(settings.groupNames.keys.map { circleId in
+                return collectCirclePeers(
+                    postbox: postbox,
+                    network: network,
+                    circleId: circleId,
+                    members: settings.remoteInclusions.keys.filter { settings.remoteInclusions[$0] == circleId }
+                )
+            })
+        } |> map { $0.reduce(into: [PeerGroupId: [PeerId: [PeerId]]]()) { $0[$1.0] = $1.1 } }
+    }
+        
+    public static func sendMembers(postbox: Postbox, network: Network) -> Signal<Void, NoError> {
+        struct Connection: Codable {
+            var chat: Int64
+            var members: [Int64]
+        }
+        struct CollectedCircle: Codable {
+            var circle: Int32
+            var connections: [Connection]
+        }
+        return Circles.getSettings(postbox: postbox)
+        |> mapToSignal { settings in
+            if let token = settings.token {
+                return Circles.collectPeers(postbox: postbox, network: network)
+                |> mapToSignal { collected in
+                    return Signal<Void, NoError> { subscriber in
+                        let apiArray = collected.keys.map { circleId in
+                            return CollectedCircle(
+                                circle: circleId.rawValue,
+                                connections: collected[circleId]!.keys.map { Connection(
+                                    chat: $0.botApiId,
+                                    members: collected[circleId]![$0]!.map { $0.botApiId }
+                                )}
+                            )
+                        }
+                        let jsonData = try! JSONEncoder().encode(apiArray)
+                        let jsonString = String(data: jsonData, encoding: .utf8)!
+                        
+                        let urlString = settings.url
+                        let url = URL(string: urlString)!
+                        var request = URLRequest(url: url)
+                        request.setValue(token, forHTTPHeaderField: "Authorization")
+                        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                        request.httpMethod = "POST"
+                        request.httpBody = jsonData
+                        
+                        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+                            guard let data = data,
+                                let response = response as? HTTPURLResponse,
+                                error == nil else {
+                                    subscriber.putCompletion()
+                                    return
+                                }
+                            guard (200 ... 299) ~= response.statusCode else {
+                                subscriber.putCompletion()
+                                return
+                            }
+                            subscriber.putCompletion()
+                        }
+                        task.resume()
+                        return EmptyDisposable
+                    }
+                }
+            } else {
+                return .single(Void())
+            }
+        }
+    }
+    
     public func isEqual(to: PreferencesEntry) -> Bool {
         if let to = to as? Circles {
             return self == to
@@ -334,6 +442,18 @@ func parseBotApiPeerId(_ apiId: Int64) -> PeerId {
         } else {
             return PeerId(namespace: Namespaces.Peer.CloudChannel, id: PeerId.Id(-apiId-trillion))
         }
-        
     }
 }
+
+extension PeerId {
+    public var botApiId: Int64 {
+        switch namespace {
+        case Namespaces.Peer.CloudGroup: return -Int64(id)
+        case Namespaces.Peer.CloudChannel:
+            let trillion:Int64 = 1000000000000
+            return -(trillion+Int64(id))
+        default: return Int64(id)
+        }
+    }
+}
+
