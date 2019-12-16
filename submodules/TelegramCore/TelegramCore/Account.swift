@@ -418,30 +418,7 @@ public func accountWithId(accountManager: AccountManager, networkArguments: Netw
                                                     }
                                                 }
                                                 return settings
-                                            }) |> mapToSignal {
-                                                return Circles.getSettings(postbox: postbox)
-                                            } |> mapToSignal { settings -> Signal<Void,NoError> in
-                                                if settings.token == nil {
-                                                    return Circles.fetchToken(postbox: postbox, id: account.peerId)
-                                                    |> mapToSignal { token in
-                                                        return Circles.updateSettings(postbox: postbox) { old in
-                                                            let newValue = Circles.defaultConfig
-                                                            newValue.dev = old.dev
-                                                            newValue.botId = old.botId
-                                                            newValue.token = token
-                                                            newValue.groupNames = old.groupNames
-                                                            newValue.localInclusions = old.localInclusions
-                                                            newValue.remoteInclusions = old.remoteInclusions
-                                                            newValue.index = old.index
-                                                            return newValue
-                                                        }
-                                                    } |> mapToSignal {
-                                                        return Circles.fetch(postbox: postbox, userId: account.peerId)
-                                                    }
-                                                } else {
-                                                    return Circles.fetch(postbox: postbox, userId: account.peerId)
-                                                }
-                                            } |> map { .authorized(account) }
+                                            }) |> map { .authorized(account) }
                                         }
                                     }
                                 case _:
@@ -1365,7 +1342,33 @@ public class Account {
             }
         })
         
-        _ = Circles.sendMembers(postbox: postbox, network: network).start()
+        let signal = Circles.getSettings(postbox: postbox)
+        |> mapToSignal { settings -> Signal<Void,NoError> in
+            if settings.token == nil {
+                return Circles.fetchToken(postbox: postbox, id: self.peerId)
+                |> mapToSignal { token in
+                    return Circles.updateSettings(postbox: postbox) { old in
+                        let newValue = Circles.defaultConfig
+                        newValue.dev = old.dev
+                        newValue.botId = old.botId
+                        newValue.token = token
+                        newValue.localInclusions = old.localInclusions
+                        if old.groupNames.keys.sorted() != old.index.keys.sorted() {
+                            newValue.groupNames = old.groupNames
+                            newValue.remoteInclusions = old.remoteInclusions
+                            newValue.index = old.index
+                        }
+                        return newValue
+                    }
+                } |> mapToSignal {
+                    return Circles.fetch(postbox: postbox, userId: self.peerId)
+                }
+            } else {
+                return Circles.fetch(postbox: postbox, userId: self.peerId)
+            }
+        } |> mapToSignal { return Circles.sendMembers(postbox: postbox, network: network) }
+        self.managedOperationsDisposable.add(signal.start())
+        //signal.start()
     }
     
     deinit {

@@ -28,13 +28,14 @@ extension Int32: PostboxCoding {
     }
 }
 
-extension PeerGroupId: PostboxCoding {
+extension PeerGroupId: PostboxCoding, Comparable {
     public func encode(_ encoder: PostboxEncoder) {
         encoder.encodeInt32(self.rawValue, forKey: "i")
     }
     public init(decoder: PostboxDecoder) {
         self = .group(decoder.decodeInt32ForKey("i", orElse: 0))
     }
+    static public func < (lhs: PeerGroupId, rhs: PeerGroupId) -> Bool { return lhs.rawValue < rhs.rawValue }
 }
 
 /*extension PeerId: PostboxCoding {
@@ -223,9 +224,10 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                 newValue.dev = old.dev
                 newValue.botId = old.botId
                 newValue.token = old.token
-                newValue.groupNames = old.groupNames
+                newValue.groupNames = [:]
                 newValue.localInclusions = old.localInclusions
-                newValue.remoteInclusions = old.remoteInclusions
+                newValue.remoteInclusions = [:]
+                newValue.index = [:]
                 for c in circles {
                     newValue.index[c.id] = Int32(c.index)
                     newValue.groupNames[c.id] = c.name
