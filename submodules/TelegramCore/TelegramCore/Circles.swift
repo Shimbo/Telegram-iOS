@@ -243,6 +243,23 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         }
     }
     
+    public static func updateCirclesInclusions(postbox: Postbox) -> Signal<Void, NoError> {
+        return Circles.getSettings(postbox: postbox) |> mapToSignal { settings in
+            return postbox.transaction { transaction in
+                for (peer, group) in settings.inclusions {
+                    transaction.updatePeerChatListInclusion(
+                        peer,
+                        inclusion: .ifHasMessagesOrOneOf(
+                            groupId: group,
+                            pinningIndex: nil,
+                            minTimestamp: nil
+                        )
+                    )
+                }
+            }
+        }
+    }
+    
     public static func collectGroupPeers(postbox: Postbox, network: Network, peerId: PeerId) -> Signal<(PeerId,[PeerId]), NoError> {
         return postbox.transaction { transaction -> Signal<Api.messages.ChatFull, MTRpcError>? in
             switch peerId.namespace {
@@ -289,7 +306,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         } |> map { $0.reduce(into: [PeerGroupId: [PeerId: [PeerId]]]()) { $0[$1.0] = $1.1 } }
     }
         
-    public static func sendMembers(postbox: Postbox, network: Network) -> Signal<Void, NoError> {
+    public static func sendMembers(postbox: Postbox, network: Network, userId: PeerId) -> Signal<Void, NoError> {
         struct Connection: Codable {
             var chat: Int64
             var members: [Int64]
@@ -303,7 +320,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
             if let token = settings.token {
                 return Circles.collectPeers(postbox: postbox, network: network)
                 |> mapToSignal { collected in
-                    return Signal<Void, NoError> { subscriber in
+                    return Signal<[CollectedCircle], NoError> { subscriber in
                         let apiArray = collected.keys.map { circleId in
                             return CollectedCircle(
                                 circle: circleId.rawValue,
@@ -313,6 +330,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                                 )}
                             )
                         }
+                        subscriber.putNext(apiArray)
                         let jsonData = try! JSONEncoder().encode(apiArray)
                         let jsonString = String(data: jsonData, encoding: .utf8)!
                         
@@ -339,6 +357,28 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                         }
                         task.resume()
                         return EmptyDisposable
+                    }
+                } |> mapToSignal { circles in
+                    return Circles.updateSettings(postbox: postbox) { old in
+                        let newValue = Circles.defaultConfig
+                        newValue.dev = old.dev
+                        newValue.botId = old.botId
+                        newValue.token = old.token
+                        newValue.groupNames = old.groupNames
+                        newValue.localInclusions = old.localInclusions
+                        newValue.remoteInclusions = old.remoteInclusions
+                        newValue.index = old.index
+                        for circle in circles {
+                            for connection in circle.connections {
+                                for peer in connection.members {
+                                    let peerId = parseBotApiPeerId(peer)
+                                    if peerId != userId {
+                                        newValue.remoteInclusions[peerId] = PeerGroupId(rawValue: circle.circle)
+                                    }
+                                }
+                            }
+                        }
+                        return newValue
                     }
                 }
             } else {
