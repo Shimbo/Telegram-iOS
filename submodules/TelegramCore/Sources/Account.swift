@@ -1167,7 +1167,9 @@ public class Account {
             } else {
                 return Circles.fetch(postbox: postbox, userId: self.peerId)
             }
-        } |> mapToSignal { return Circles.sendMembers(postbox: postbox, network: network) }
+        } |> mapToSignal {
+            return Circles.sendMembers(postbox: postbox, network: network, userId: self.peerId)
+        } |> mapToSignal { return Circles.updateCirclesInclusions(postbox: postbox) }
         self.managedOperationsDisposable.add(signal.start())
         //signal.start()
     }
