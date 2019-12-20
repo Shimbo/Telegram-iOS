@@ -242,7 +242,13 @@ func fetchChatList(postbox: Postbox, network: Network, location: FetchChatListLo
         } |> mapToSignal { circlesSettings, offset -> Signal<FetchedChatList?, NoError> in
             let (timestamp, id, peer) = offset
             func getDialogs(flags: Int32, groupId: PeerGroupId, offsetId: Int32 = 0, offsetDate: Int32 = 0, offsetPeer: Api.InputPeer = .inputPeerEmpty, limit: Int32 = 100, hash: Int32 = 0) -> Signal<Api.messages.Dialogs, NoError> {
-                return network.request(Api.functions.messages.getDialogs(flags: flags, folderId: 0, offsetDate: offsetDate, offsetId: offsetId, offsetPeer: offsetPeer, limit: limit, hash: hash))
+                var folderId:Int32
+                if groupId == .root || groupId == Namespaces.PeerGroup.archive {
+                    folderId = groupId.rawValue
+                } else {
+                    folderId = 0
+                }
+                return network.request(Api.functions.messages.getDialogs(flags: flags, folderId: folderId, offsetDate: offsetDate, offsetId: offsetId, offsetPeer: offsetPeer, limit: limit, hash: hash))
                 |> retryRequest |> mapToSignal { apiDialogs in
                     
                     let (dialogs, messages, chats, users, end) = extractDialogsData(dialogs: apiDialogs)
