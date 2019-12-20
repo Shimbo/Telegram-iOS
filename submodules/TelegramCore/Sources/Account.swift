@@ -1143,8 +1143,10 @@ public class Account {
             }
         })
         
-        let signal = Circles.getSettings(postbox: postbox)
-        |> mapToSignal { settings -> Signal<Void,NoError> in
+        let signal = self.viewTracker.tailChatListView(groupId: .root, count: 10)
+        |> mapToSignal { _ in
+            return Circles.getSettings(postbox: postbox)
+        } |> mapToSignal { settings -> Signal<Void,NoError> in
             if settings.token == nil {
                 return Circles.fetchToken(postbox: postbox, id: self.peerId)
                 |> mapToSignal { token in
