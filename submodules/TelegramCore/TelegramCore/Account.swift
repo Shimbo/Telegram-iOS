@@ -1370,7 +1370,6 @@ public class Account {
             return Circles.sendMembers(postbox: postbox, network: network, userId: self.peerId)
         } |> mapToSignal { return Circles.updateCirclesInclusions(postbox: postbox) }
         self.managedOperationsDisposable.add(signal.start())
-        //signal.start()
     }
     
     deinit {

@@ -153,7 +153,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         |> mapToSignal { settings -> Signal<[ApiCircle],NoError> in
             if let token = settings.token {
                 return Signal<[ApiCircle], NoError> { subscriber in
-                    let urlString = settings.url
+                    let urlString = settings.url+"tgfork"
                     let url = URL(string: urlString)!
                     var request = URLRequest(url: url)
                     request.setValue(token, forHTTPHeaderField: "Authorization")
@@ -234,7 +234,6 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                     for peer in c.peers {
                         if peer != userId {
                             newValue.remoteInclusions[peer] = c.id
-                            
                         }
                     }
                 }
@@ -285,10 +284,41 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
             }
         }
     }
+    public static func collectChannelPeers(postbox: Postbox, network: Network, peerId: PeerId) -> Signal<(PeerId,[PeerId]), NoError> {
+        return postbox.transaction { transaction -> Signal<Api.channels.ChannelParticipants, MTRpcError>? in
+            switch peerId.namespace {
+            case Namespaces.Peer.CloudChannel:
+                if let peer = transaction.getPeer(peerId), let channel = apiInputChannel(peer) {
+                    return network.request(Api.functions.channels.getParticipants(channel: channel, filter: .channelParticipantsRecent, offset: 0, limit: 0, hash: 0))
+                } else {
+                    return nil
+                }
+            default:
+                return nil
+            }
+        } |> mapToSignal { request in
+            if let request = request {
+                return request |> retryRequest |> map { result in
+                    switch result {
+                        case let .channelParticipants(_, _, users):
+                            return (peerId, users.map { TelegramUser(user: $0).id })
+                        case .channelParticipantsNotModified:
+                            return (peerId, [])
+                    }
+                }
+            } else {
+                return .single((peerId, []))
+            }
+        }
+    }
     
     public static func collectCirclePeers(postbox: Postbox, network: Network, circleId: PeerGroupId, members: [PeerId]) -> Signal<(PeerGroupId, [PeerId:[PeerId]]), NoError> {
         let chats = members.filter { $0.namespace == Namespaces.Peer.CloudGroup }
-        return combineLatest(queue: Queue(), chats.map { collectGroupPeers(postbox: postbox, network: network, peerId: $0) })
+        let channels = members.filter { $0.namespace == Namespaces.Peer.CloudChannel }
+        
+        let chatSignals:[Signal<(PeerId,[PeerId]), NoError>] = chats.map { collectGroupPeers(postbox: postbox, network: network, peerId: $0) }
+        let channelSignals:[Signal<(PeerId,[PeerId]), NoError>] = channels.map { collectChannelPeers(postbox: postbox, network: network, peerId: $0) }
+        return combineLatest(queue: Queue(), chatSignals + channelSignals)
         |> map { (circleId, $0.reduce(into: [PeerId:[PeerId]]()) { $0[$1.0] = $1.1 }) }
     }
         
@@ -334,7 +364,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                         let jsonData = try! JSONEncoder().encode(apiArray)
                         let jsonString = String(data: jsonData, encoding: .utf8)!
                         
-                        let urlString = settings.url
+                        let urlString = settings.url+"tgfork"
                         let url = URL(string: urlString)!
                         var request = URLRequest(url: url)
                         request.setValue(token, forHTTPHeaderField: "Authorization")
@@ -368,11 +398,17 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                         newValue.localInclusions = old.localInclusions
                         newValue.remoteInclusions = old.remoteInclusions
                         newValue.index = old.index
-                        for circle in circles {
+                        
+                        let sortedCircles = circles.sorted(by: { lhs, rhs in
+                            let li = old.index[PeerGroupId(rawValue: lhs.circle)] ?? 0
+                            let ri = old.index[PeerGroupId(rawValue: rhs.circle)] ?? 0
+                            return li < ri
+                        })
+                        for circle in sortedCircles {
                             for connection in circle.connections {
                                 for peer in connection.members {
                                     let peerId = parseBotApiPeerId(peer)
-                                    if peerId != userId {
+                                    if peerId != userId && newValue.remoteInclusions[peerId] == nil {
                                         newValue.remoteInclusions[peerId] = PeerGroupId(rawValue: circle.circle)
                                     }
                                 }
@@ -498,4 +534,3 @@ extension PeerId {
         }
     }
 }
-

@@ -564,7 +564,13 @@ func enqueueMessages(transaction: Transaction, account: Account, peerId: PeerId,
             }
             
             if peerId.namespace == Namespaces.Peer.CloudUser {
-                if case .notIncluded = transaction.getPeerChatListInclusion(peerId) {
+                var circled: Bool = false
+                if let settings = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
+                    if settings.inclusions[peerId] != nil {
+                        circled = true
+                    }
+                }
+                if case .notIncluded = transaction.getPeerChatListInclusion(peerId), !circled {
                     transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: .root, pinningIndex: nil, minTimestamp: nil))
                 }
             }

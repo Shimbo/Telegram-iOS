@@ -237,7 +237,88 @@ func fetchChatList(postbox: Postbox, network: Network, location: FetchChatListLo
         }
         
         return offset
-        |> mapToSignal { (timestamp, id, peer) -> Signal<FetchedChatList?, NoError> in
+        |> mapToSignal { offset -> Signal<(Circles, (Int32, Int32, Api.InputPeer)), NoError> in
+            return Circles.getSettings(postbox: postbox) |> map { ($0, offset) }
+        } |> mapToSignal { circlesSettings, offset -> Signal<FetchedChatList?, NoError> in
+            let (timestamp, id, peer) = offset
+            func getDialogs(flags: Int32, groupId: PeerGroupId, offsetId: Int32 = 0, offsetDate: Int32 = 0, offsetPeer: Api.InputPeer = .inputPeerEmpty, limit: Int32 = 100, hash: Int32 = 0) -> Signal<Api.messages.Dialogs, NoError> {
+                return network.request(Api.functions.messages.getDialogs(flags: flags, folderId: 0, offsetDate: offsetDate, offsetId: offsetId, offsetPeer: offsetPeer, limit: limit, hash: hash))
+                |> retryRequest |> mapToSignal { apiDialogs in
+                    
+                    let (dialogs, messages, chats, users, end) = extractDialogsData(dialogs: apiDialogs)
+                    
+                    func inputPeerPeerFromApiChannelOrGroup(_ id: Int32) -> Peer? {
+                        if let first = chats.first(where: {$0.peerId.id == id}) {
+                            return parseTelegramGroupOrChannel(chat: first)
+                        } else {
+                            return nil
+                        }
+                        
+                    }
+                    
+                    func peerFromApi(_ apiPeer: Api.Peer) -> Peer? {
+                        switch apiPeer {
+                        case let .peerUser(id):
+                            if let first = users.first(where: {$0.peerId.id == id}) {
+                                return TelegramUser(user: users.first {$0.peerId.id == id}!)
+                            } else {
+                                return nil
+                            }
+                        case let .peerChat(id):
+                            return inputPeerPeerFromApiChannelOrGroup(id)
+                        case let .peerChannel(id):
+                            return inputPeerPeerFromApiChannelOrGroup(id)
+                        }
+                    }
+                    
+                    func extractOffset(_ messages: [Api.Message], _ chats: [Api.Chat], _ users: [Api.User]) -> (Int32, Int32, Peer)? {
+                        if let lastMessage = messages.last {
+                            var offsetPeer: Peer?
+                            var offsetDate: Int32 = 0
+                            var offsetId: Int32 = 0
+                            
+                            switch lastMessage {
+                            case let .message(_,id,_,peer,_,_,_,date,_,_,_,_,_,_,_,_,_):
+                                offsetPeer = peerFromApi(peer)
+                                offsetDate = date
+                                offsetId = id
+                            case let .messageService(_,id,_,peer,_,date, _):
+                                offsetPeer = peerFromApi(peer)
+                                offsetDate = date
+                                offsetId = id
+                            default:
+                                print("empty last message")
+                            }
+                            if let offsetPeer = offsetPeer {
+                                return (offsetId, offsetDate, offsetPeer)
+                            } else {
+                                print("one of offset variables is nil")
+                            }
+                        }
+                        return nil
+                    }
+                    
+                    
+                    let offset = extractOffset(messages, chats, users)
+                    
+                    if let (offsetId, offsetDate, offsetPeer) = offset, let offsetInputPeer = apiInputPeer(offsetPeer) {
+                        return getDialogs(flags: flags, groupId: groupId, offsetId: offsetId, offsetDate: offsetDate, offsetPeer: offsetInputPeer) |> map { nextApiDialogs in
+
+                            let (nextDialogs, nextMessages, nextChats, nextUsers, _) = extractDialogsData(dialogs: nextApiDialogs)
+                            
+                            return Api.messages.Dialogs.dialogs(
+                                dialogs: dialogs + nextDialogs,
+                                messages: messages + nextMessages,
+                                chats: chats + nextChats,
+                                users: users + nextUsers
+                            )
+                        }
+                    } else {
+                        return .single(apiDialogs)
+                    }
+                }
+            }
+            
             let additionalPinnedChats: Signal<Api.messages.PeerDialogs?, NoError>
             if case .inputPeerEmpty = peer, timestamp == 0 {
                 let folderId: Int32
@@ -264,16 +345,18 @@ func fetchChatList(postbox: Postbox, network: Network, location: FetchChatListLo
                     flags |= 1 << 0
                     requestFolderId = groupId.rawValue
             }
-            let requestChats = network.request(Api.functions.messages.getDialogs(flags: flags, folderId: requestFolderId, offsetDate: timestamp, offsetId: id, offsetPeer: peer, limit: limit, hash: hash))
-            |> retryRequest
             
+            var requestChats: Signal<Api.messages.Dialogs, NoError>
+
+            requestChats = getDialogs(flags: flags, groupId: PeerGroupId(rawValue: requestFolderId), offsetId: id, offsetDate: timestamp, offsetPeer: peer, limit: limit, hash: hash)
             
-            return combineLatest(requestChats, additionalPinnedChats, Circles.settingsView(postbox: postbox))
-            |> mapToSignal { remoteChats, pinnedChats, circlesSettings -> Signal<FetchedChatList?, NoError> in
-                /*if case .dialogsNotModified = remoteChats {
+            return combineLatest(requestChats, additionalPinnedChats)
+            |> mapToSignal { remoteChats, pinnedChats -> Signal<FetchedChatList?, NoError> in
+                if case .dialogsNotModified = remoteChats {
                     return .single(nil)
-                }*/
+                }
                 let extractedRemoteDialogs = extractDialogsData(dialogs: remoteChats)
+                
                 let parsedRemoteChats = parseDialogs(apiDialogs: extractedRemoteDialogs.apiDialogs, apiMessages: extractedRemoteDialogs.apiMessages, apiChats: extractedRemoteDialogs.apiChats, apiUsers: extractedRemoteDialogs.apiUsers, apiIsAtLowestBoundary: extractedRemoteDialogs.apiIsAtLowestBoundary)
                 var parsedPinnedChats: ParsedDialogs?
                 if let pinnedChats = pinnedChats {
@@ -287,18 +370,34 @@ func fetchChatList(postbox: Postbox, network: Network, location: FetchChatListLo
                     combinedReferencedFolders.formUnion(Set(parsedPinnedChats.referencedFolders.keys))
                 }
                 
+                if timestamp == 0 {
+                    combinedReferencedFolders.formUnion(Set(circlesSettings.groupNames.keys))
+                }
+                
                 var folderSignals: [Signal<(PeerGroupId, ParsedDialogs), NoError>] = []
                 if case .general = location {
                     for groupId in combinedReferencedFolders {
-                        let flags: Int32 = 1 << 1
-                        let requestFeed = network.request(Api.functions.messages.getDialogs(flags: flags, folderId: groupId.rawValue, offsetDate: 0, offsetId: 0, offsetPeer: .inputPeerEmpty, limit: 32, hash: 0))
-                        |> retryRequest
-                        |> map { result -> (PeerGroupId, ParsedDialogs) in
-                            let extractedData = extractDialogsData(dialogs: result)
-                            let parsedChats = parseDialogs(apiDialogs: extractedData.apiDialogs, apiMessages: extractedData.apiMessages, apiChats: extractedData.apiChats, apiUsers: extractedData.apiUsers, apiIsAtLowestBoundary: extractedData.apiIsAtLowestBoundary)
-                            return (groupId, parsedChats)
+                        if circlesSettings.groupNames[groupId] != nil {
+                            let peers = circlesSettings.inclusions.keys.filter { circlesSettings.inclusions[$0] == groupId }
+                            let flags: Int32 = 1 << 1
+                            
+                            let requestFeed = getDialogs(flags: flags, groupId: groupId) |> map { result -> (PeerGroupId, ParsedDialogs) in
+                                let extractedData = extractDialogsData(dialogs: result)
+                                let parsedChats = parseDialogs(apiDialogs: extractedData.apiDialogs, apiMessages: extractedData.apiMessages, apiChats: extractedData.apiChats, apiUsers: extractedData.apiUsers, apiIsAtLowestBoundary: extractedData.apiIsAtLowestBoundary)
+                                return (groupId, parsedChats)
+                            }
+                            folderSignals.append(requestFeed)
+                        } else {
+                            let flags: Int32 = 1 << 1
+                            let requestFeed = network.request(Api.functions.messages.getDialogs(flags: flags, folderId: groupId.rawValue, offsetDate: 0, offsetId: 0, offsetPeer: .inputPeerEmpty, limit: 32, hash: 0))
+                            |> retryRequest
+                            |> map { result -> (PeerGroupId, ParsedDialogs) in
+                                let extractedData = extractDialogsData(dialogs: result)
+                                let parsedChats = parseDialogs(apiDialogs: extractedData.apiDialogs, apiMessages: extractedData.apiMessages, apiChats: extractedData.apiChats, apiUsers: extractedData.apiUsers, apiIsAtLowestBoundary: extractedData.apiIsAtLowestBoundary)
+                                return (groupId, parsedChats)
+                            }
+                            folderSignals.append(requestFeed)
                         }
-                        folderSignals.append(requestFeed)
                     }
                 }
                 
