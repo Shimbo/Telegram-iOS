@@ -50,8 +50,11 @@ extension PeerGroupId: PostboxCoding, Comparable {
 public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     public static let baseApiUrl = "https://api.circles.is/"
     public static let baseDevApiUrl = "https://api.dev.randomcoffee.us/"
+    
+    public static let botName:String = "@circlesadminbot"
+    public static let botNameDev:String = "@circlesdevbot"
     public static var defaultConfig:Circles {
-        return Circles(botId: PeerId(namespace: 0, id: 871013339))
+        return Circles()
     }
     
     struct ApiCircle {
@@ -222,7 +225,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
             return Circles.updateSettings(postbox: postbox) { old in
                 let newValue = Circles.defaultConfig
                 newValue.dev = old.dev
-                newValue.botId = old.botId
+                newValue.botPeerId = old.botPeerId
                 newValue.token = old.token
                 newValue.groupNames = [:]
                 newValue.localInclusions = old.localInclusions
@@ -392,7 +395,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                     return Circles.updateSettings(postbox: postbox) { old in
                         let newValue = Circles.defaultConfig
                         newValue.dev = old.dev
-                        newValue.botId = old.botId
+                        newValue.botPeerId = old.botPeerId
                         newValue.token = old.token
                         newValue.groupNames = old.groupNames
                         newValue.localInclusions = old.localInclusions
@@ -432,12 +435,13 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     }
     
     public var token: String?
-    public var botId: PeerId
     public var groupNames: Dictionary<PeerGroupId, String> = [:]
     public var remoteInclusions: Dictionary<PeerId, PeerGroupId> = [:]
     public var localInclusions: Dictionary<PeerId, PeerGroupId> = [:]
     public var dev: Bool
     public var index: Dictionary<PeerGroupId, Int32> = [:]
+    
+    public var botPeerId: PeerId?
     
     public var inclusions: Dictionary<PeerId, PeerGroupId> {
         return self.remoteInclusions.merging(self.localInclusions) { $1 }
@@ -445,17 +449,19 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     public var url:String {
         return self.dev ? Circles.baseDevApiUrl : Circles.baseApiUrl
     }
+    public var botName:String {
+        return self.dev ? Circles.botNameDev : Circles.botName
+    }
     
     
-    public init(botId: PeerId, dev: Bool = false) {
-        self.botId = botId
+    public init(dev: Bool = false) {
         self.dev = dev
     }
     
     public init(decoder: PostboxDecoder) {
         self.dev = decoder.decodeBoolForKey("d", orElse: false)
         self.token = decoder.decodeOptionalStringForKey("ct")
-        self.botId = PeerId(decoder.decodeInt64ForKey("bi", orElse: 1234))
+        self.botPeerId = PeerId(decoder.decodeInt64ForKey("bpi", orElse: 1234))
         
         self.index = decoder.decodeObjectDictionaryForKey(
             "i",
@@ -490,7 +496,12 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         } else {
             encoder.encodeNil(forKey: "ct")
         }
-        encoder.encodeInt64(self.botId.toInt64(), forKey: "bi")
+        if let botPeerId = self.botPeerId {
+            encoder.encodeInt64(botPeerId.toInt64(), forKey: "bpi")
+        } else {
+            encoder.encodeNil(forKey: "bpi")
+        }
+        
         encoder.encodeObjectDictionary(self.groupNames , forKey: "gn", keyEncoder: {
             $1.encodeInt32($0.rawValue, forKey: "k")
         })
