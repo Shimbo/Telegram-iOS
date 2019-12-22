@@ -430,7 +430,7 @@ public final class AccountStateManager {
                                             Logger.shared.log("State", "pollDifference initial state \(authorizedState) != current state \(state.initialState.state)")
                                             return .single((nil, nil, false))
                                         } else {
-                                            return finalStateWithDifference(postbox: postbox, network: network, state: state, difference: difference)
+                                            return finalStateWithDifference(postbox: postbox, network: network, state: state, difference: difference, accountPeerId: accountPeerId)
                                                 |> mapToSignal { finalState -> Signal<(difference: Api.updates.Difference?, finalStatte: AccountReplayedFinalState?, skipBecauseOfError: Bool), NoError> in
                                                     if !finalState.state.preCachedResources.isEmpty {
                                                         for (resource, data) in finalState.state.preCachedResources {
@@ -544,7 +544,7 @@ public final class AccountStateManager {
                 let queue = self.queue
                 let signal = initialStateWithUpdateGroups(postbox: postbox, groups: groups)
                 |> mapToSignal { state -> Signal<(AccountReplayedFinalState?, AccountFinalState), NoError> in
-                    return finalStateWithUpdateGroups(postbox: postbox, network: network, state: state, groups: groups)
+                    return finalStateWithUpdateGroups(postbox: postbox, network: network, state: state, groups: groups, accountPeerId: self.accountPeerId)
                     |> mapToSignal { finalState in
                         if !finalState.state.preCachedResources.isEmpty {
                             for (resource, data) in finalState.state.preCachedResources {
