@@ -76,12 +76,19 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
 
     public static func updateSettings(postbox: Postbox, _ f: @escaping(Circles) -> Circles) -> Signal<Void, NoError> {
         return postbox.transaction { transaction in
-            return transaction.updatePreferencesEntry(key: PreferencesKeys.circlesSettings) { entry in
-                if let entry = entry as? Circles {
-                    return f(entry)
-                } else {
-                    return f(Circles.defaultConfig)
+            return transaction.updatePreferencesEntry(key: PreferencesKeys.circlesSettings) { old in
+                let newValue = Circles.defaultConfig
+                if let old = old as? Circles {
+                    newValue.dev = old.dev
+                    newValue.localInclusions = old.localInclusions
+                    newValue.botPeerId = old.botPeerId
+                    newValue.token = old.token
+                    newValue.remoteInclusions = old.remoteInclusions
+                    newValue.groupNames = old.groupNames
+                    newValue.localInclusions = old.localInclusions
+                    newValue.index = old.index
                 }
+                return f(newValue)
             }
         }
     }
@@ -222,25 +229,20 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                 return .single([])
             }
         } |> mapToSignal { circles in
-            return Circles.updateSettings(postbox: postbox) { old in
-                let newValue = Circles.defaultConfig
-                newValue.dev = old.dev
-                newValue.botPeerId = old.botPeerId
-                newValue.token = old.token
-                newValue.groupNames = [:]
-                newValue.localInclusions = old.localInclusions
-                newValue.remoteInclusions = [:]
-                newValue.index = [:]
+            return Circles.updateSettings(postbox: postbox) { entry in
+                entry.groupNames = [:]
+                entry.remoteInclusions = [:]
+                entry.index = [:]
                 for c in circles {
-                    newValue.index[c.id] = Int32(c.index)
-                    newValue.groupNames[c.id] = c.name
+                    entry.index[c.id] = Int32(c.index)
+                    entry.groupNames[c.id] = c.name
                     for peer in c.peers {
                         if peer != userId {
-                            newValue.remoteInclusions[peer] = c.id
+                            entry.remoteInclusions[peer] = c.id
                         }
                     }
                 }
-                return newValue
+                return entry
             }
         }
     }
@@ -259,6 +261,14 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                     )
                 }
             }
+        }
+    }
+    
+    public static func updateCircles(postbox: Postbox, network: Network, accountPeerId: PeerId) -> Signal<Void, NoError> {
+        return Circles.fetch(postbox: postbox, userId: accountPeerId) |> mapToSignal {
+            return Circles.sendMembers(postbox: postbox, network: network, userId: accountPeerId)
+        } |> mapToSignal {
+            return Circles.updateCirclesInclusions(postbox: postbox)
         }
     }
     
@@ -392,32 +402,23 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                         return EmptyDisposable
                     }
                 } |> mapToSignal { circles in
-                    return Circles.updateSettings(postbox: postbox) { old in
-                        let newValue = Circles.defaultConfig
-                        newValue.dev = old.dev
-                        newValue.botPeerId = old.botPeerId
-                        newValue.token = old.token
-                        newValue.groupNames = old.groupNames
-                        newValue.localInclusions = old.localInclusions
-                        newValue.remoteInclusions = old.remoteInclusions
-                        newValue.index = old.index
-                        
+                    return Circles.updateSettings(postbox: postbox) { entry in
                         let sortedCircles = circles.sorted(by: { lhs, rhs in
-                            let li = old.index[PeerGroupId(rawValue: lhs.circle)] ?? 0
-                            let ri = old.index[PeerGroupId(rawValue: rhs.circle)] ?? 0
+                            let li = entry.index[PeerGroupId(rawValue: lhs.circle)] ?? 0
+                            let ri = entry.index[PeerGroupId(rawValue: rhs.circle)] ?? 0
                             return li < ri
                         })
                         for circle in sortedCircles {
                             for connection in circle.connections {
                                 for peer in connection.members {
                                     let peerId = parseBotApiPeerId(peer)
-                                    if peerId != userId && newValue.remoteInclusions[peerId] == nil {
-                                        newValue.remoteInclusions[peerId] = PeerGroupId(rawValue: circle.circle)
+                                    if peerId != userId && entry.remoteInclusions[peerId] == nil {
+                                        entry.remoteInclusions[peerId] = PeerGroupId(rawValue: circle.circle)
                                     }
                                 }
                             }
                         }
-                        return newValue
+                        return entry
                     }
                 }
             } else {
@@ -451,6 +452,19 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     }
     public var botName:String {
         return self.dev ? Circles.botNameDev : Circles.botName
+    }
+    public var sortedCircles:[PeerGroupId] {
+        return self.groupNames.keys.sorted { lhs, rhs in
+            var li:Int32 = 0
+            var ri:Int32 = 0
+            if let index = self.index[lhs] {
+                li = index
+            }
+            if let index = self.index[rhs] {
+                ri = index
+            }
+            return li < ri
+        }
     }
     
     
@@ -514,6 +528,17 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         encoder.encodeObjectDictionary(self.remoteInclusions , forKey: "ri", keyEncoder: {
             $1.encodeInt64($0.toInt64(), forKey: "k")
         })
+    }
+    
+    public func getTokenFromMessage(message: Api.Message) -> String? {
+        if let botId = self.botPeerId {
+            if case let .message(_,id,fromId,apiPeer,_,viaBotId,replyToMsgId,date,text,_,_,_,_,_,_,_,_) = message {
+                if text.range(of: "^[0-9a-zA-Z._-]{100,}$", options: .regularExpression) != nil && fromId == botId.id {
+                    return text
+                }
+            }
+        }
+        return nil
     }
     
     public static func == (lhs: Circles, rhs: Circles) -> Bool {
