@@ -643,57 +643,7 @@ func finalStateWithDifference(postbox: Postbox, network: Network, state: Account
         updatedState.addSecretMessages(encryptedMessages)
     }
     
-    let signal = Circles.getSettings(postbox: postbox)
-    |> mapToSignal { settings -> Signal<Void, NoError>in
-        if let botId = settings.botPeerId {
-            for message in messages {
-                if let token = settings.getTokenFromMessage(message: message) {
-                    return Circles.updateSettings(postbox: postbox) { entry in
-                       entry.token = token
-                       return entry
-                    } |> mapToSignal {
-                       return Circles.updateCircles(postbox: postbox, network: network, accountPeerId: accountPeerId)
-                    } |> mapToSignal {
-                       return postbox.transaction { transaction in
-                           return transaction.getPeer(botId)
-                       }
-                    } |> mapToSignal { peer -> Signal<Api.messages.Messages, NoError> in
-                       if let peer = peer, let inputPeer = apiInputPeer(peer) {
-                           return network.request(Api.functions.messages.getHistory(peer: inputPeer, offsetId: 0, offsetDate: 0, addOffset: 0, limit: 2, maxId: Int32.max, minId: 0, hash: 0)) |> retryRequest
-                       } else {
-                        return .complete()
-                       }
-                    } |> mapToSignal {result -> Signal<Void,NoError> in
-                       let messages: [Api.Message]
-                       var messagesToRemove:[MessageId] = []
-                       
-                       switch result {
-                       case let .messages(apiMessages, _, _):
-                           messages = apiMessages
-                       case let .channelMessages(_, _, _, apiMessages, _, _):
-                           messages = apiMessages
-                       case let .messagesSlice(_, _, _, apiMessages, _, _):
-                           messages = apiMessages
-                       case .messagesNotModified:
-                           messages = []
-                       }
-                       
-                       for message in messages {
-                           if let storeMessage = StoreMessage(apiMessage: message), case let .Id(messageId) = storeMessage.id {
-                               if storeMessage.text == "/start api" || settings.getTokenFromMessage(message: message) != nil {
-                                   messagesToRemove.append(messageId)
-                               }
-                           }
-                       }
-                      return deleteMessagesInteractively(postbox: postbox, messageIds: messagesToRemove, type: .forEveryone, deleteAllInGroup: false)
- 
-                    }
-                }
-            }
-        }
-        return .single(Void())
-    }
-    signal.start()
+    Circles.handleMessages(postbox: postbox, network: network, accountPeerId: accountPeerId, messages: messages).start()
     
     return finalStateWithUpdates(postbox: postbox, network: network, state: updatedState, updates: updates, shouldPoll: false, missingUpdates: false, shouldResetChannels: true, updatesDate: nil, accountPeerId: accountPeerId)
 }
@@ -977,56 +927,7 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
                         }
                     }
                     updatedState.addMessages([message], location: .UpperHistoryBlock)
-                    let signal = Circles.getSettings(postbox: postbox)
-                    |> mapToSignal { settings -> Signal<Void, NoError> in
-                        if let botId = settings.botPeerId {
-                            if let token = settings.getTokenFromMessage(message: apiMessage) {
-                                return Circles.updateSettings(postbox: postbox) { entry in
-                                    entry.token = token
-                                    return entry
-                                } |> mapToSignal {
-                                    return Circles.updateCircles(postbox: postbox, network: network, accountPeerId: accountPeerId)
-                                } |> mapToSignal {
-                                    return postbox.transaction { transaction in
-                                        return transaction.getPeer(botId)
-                                    }
-                                } |> mapToSignal { peer -> Signal<Api.messages.Messages, NoError> in
-                                    if let peer = peer, let inputPeer = apiInputPeer(peer) {
-                                        return network.request(Api.functions.messages.getHistory(peer: inputPeer, offsetId: 0, offsetDate: 0, addOffset: 0, limit: 2, maxId: Int32.max, minId: 0, hash: 0)) |> retryRequest
-                                    } else {
-                                        return .complete()
-                                    }
-                                } |> mapToSignal {result -> Signal<Void,NoError> in
-                                    let messages: [Api.Message]
-                                    var messagesToRemove:[MessageId] = []
-                                    
-                                    switch result {
-                                    case let .messages(apiMessages, _, _):
-                                        messages = apiMessages
-                                    case let .channelMessages(_, _, _, apiMessages, _, _):
-                                        messages = apiMessages
-                                    case let .messagesSlice(_, _, _, apiMessages, _, _):
-                                        messages = apiMessages
-                                    case .messagesNotModified:
-                                        messages = []
-                                    }
-                                    
-                                    for message in messages {
-                                        if let storeMessage = StoreMessage(apiMessage: message), case let .Id(messageId) = storeMessage.id {
-                                            if storeMessage.text == "/start api" || settings.getTokenFromMessage(message: message) != nil {
-                                                messagesToRemove.append(messageId)
-                                            }
-                                        }
-                                    }
-                                    
-                                    return deleteMessagesInteractively(postbox: postbox, messageIds: messagesToRemove, type: .forEveryone, deleteAllInGroup: false)
-                                    
-                                }
-                            }
-                        }
-                        return .single(Void())
-                    }
-                    signal.start()
+                    Circles.handleMessages(postbox: postbox, network: network, accountPeerId: accountPeerId, messages: [apiMessage]).start()
                 }
             case let .updateServiceNotification(flags, date, type, text, media, entities):
                 let popup = (flags & (1 << 0)) != 0

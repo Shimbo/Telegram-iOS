@@ -103,60 +103,6 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
             }
         } |> distinctUntilChanged
     }
-    public static func fetchBotId() -> Signal<PeerId, NoError> {
-        /*return Signal<PeerId, NoError> { subscriber in
-            let urlString = Circles.baseApiUrl+"bot_id"
-            Alamofire.request(urlString).responseJSON { response in
-                if let error = response.error {
-                    //subscriber.putError(error)
-                } else {
-                    if let result = response.result.value {
-                        let json = SwiftyJSON.JSON(result)
-                        subscriber.putNext(PeerId(json["id"].int64Value))
-                    }
-                }
-                subscriber.putCompletion()
-            }
-            return EmptyDisposable
-        }*/
-        return .single(PeerId(namespace: 0, id: 871013339))
-    }
-    public static func fetchToken(postbox: Postbox, id: PeerId, requestToken: String = "") -> Signal<String?, NoError> {
-        return Circles.getSettings(postbox: postbox)
-        |> mapToSignal { settings in
-            return Signal<String?, NoError> { subscriber in
-                let urlString = settings.url+"login/"+String(id.id)
-                
-                let url = URL(string: urlString)!
-                var request = URLRequest(url: url)
-                let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                    guard let data = data,
-                        let response = response as? HTTPURLResponse,
-                        error == nil else {
-                            subscriber.putNext(nil)
-                            subscriber.putCompletion()
-                            return
-                        }
-                    guard (200 ... 299) ~= response.statusCode else {
-                        subscriber.putNext(nil)
-                        subscriber.putCompletion()
-                        return
-                    }
-
-                    if case let .dictionary(json) = JSON(data: data) {
-                        if case let .string(token) = json["token"] {
-                            subscriber.putNext(token)
-                        }
-                    } else {
-                        subscriber.putNext(nil)
-                    }
-                    subscriber.putCompletion()
-                }
-                task.resume()
-                return EmptyDisposable
-            }
-        }
-    }
     
     public static func fetch(postbox: Postbox, userId: PeerId) -> Signal<Void, NoError> {
         return Circles.getSettings(postbox: postbox)
@@ -164,6 +110,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
             if let token = settings.token {
                 return Signal<[ApiCircle], NoError> { subscriber in
                     let urlString = settings.url+"tgfork"
+                    //let urlString = "https://my-json-server.typicode.com/michaelenco/fakeapi/circles"
                     let url = URL(string: urlString)!
                     var request = URLRequest(url: url)
                     request.setValue(token, forHTTPHeaderField: "Authorization")
@@ -251,14 +198,16 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         return Circles.getSettings(postbox: postbox) |> mapToSignal { settings in
             return postbox.transaction { transaction in
                 for (peer, group) in settings.inclusions {
-                    transaction.updatePeerChatListInclusion(
-                        peer,
-                        inclusion: .ifHasMessagesOrOneOf(
-                            groupId: group,
-                            pinningIndex: nil,
-                            minTimestamp: nil
+                    if let localPeer = transaction.getPeer(peer) {
+                        transaction.updatePeerChatListInclusion(
+                            localPeer.id,
+                            inclusion: .ifHasMessagesOrOneOf(
+                                groupId: group,
+                                pinningIndex: nil,
+                                minTimestamp: 0
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
@@ -424,6 +373,60 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
             } else {
                 return .single(Void())
             }
+        }
+    }
+    
+    public static func handleMessages(postbox: Postbox, network: Network, accountPeerId: PeerId, messages: [Api.Message]) -> Signal<Void, NoError> {
+        return Circles.getSettings(postbox: postbox)
+        |> mapToSignal { settings in
+            if let botId = settings.botPeerId {
+                for message in messages {
+                    if let token = settings.getTokenFromMessage(message: message) {
+                        return Circles.updateSettings(postbox: postbox) { entry in
+                            entry.token = token
+                            return entry
+                        } |> mapToSignal {
+                            return Circles.updateCircles(postbox: postbox, network: network, accountPeerId: accountPeerId)
+                        } |> mapToSignal {
+                            return postbox.transaction { transaction in
+                                return transaction.getPeer(botId)
+                            }
+                        } |> mapToSignal { peer -> Signal<Api.messages.Messages, NoError> in
+                            if let peer = peer, let inputPeer = apiInputPeer(peer) {
+                                return network.request(Api.functions.messages.getHistory(peer: inputPeer, offsetId: 0, offsetDate: 0, addOffset: 0, limit: 2, maxId: Int32.max, minId: 0, hash: 0)) |> retryRequest
+                            } else {
+                                return .complete()
+                            }
+                        } |> mapToSignal {result -> Signal<Void,NoError> in
+                            let messages: [Api.Message]
+                            var messagesToRemove:[MessageId] = []
+                            
+                            switch result {
+                            case let .messages(apiMessages, _, _):
+                                messages = apiMessages
+                            case let .channelMessages(_, _, _, apiMessages, _, _):
+                                messages = apiMessages
+                            case let .messagesSlice(_, _, _, apiMessages, _, _):
+                                messages = apiMessages
+                            case .messagesNotModified:
+                                messages = []
+                            }
+                            
+                            for message in messages {
+                                if let storeMessage = StoreMessage(apiMessage: message), case let .Id(messageId) = storeMessage.id {
+                                    if storeMessage.text == "/start api" || settings.getTokenFromMessage(message: message) != nil {
+                                        messagesToRemove.append(messageId)
+                                    }
+                                }
+                            }
+                            return deleteMessagesInteractively(postbox: postbox, messageIds: messagesToRemove, type: .forEveryone, deleteAllInGroup: false)
+                        }
+                    } else if case let .message(_,_,fromId,_,_,_,_,_,_,_,_,_,_,_,_,_,_) = message, fromId == botId.id {
+                        return Circles.updateCircles(postbox: postbox, network: network, accountPeerId: accountPeerId)
+                    }
+                }
+            }
+            return .single(Void())
         }
     }
     

@@ -246,7 +246,7 @@ func fetchChatList(postbox: Postbox, network: Network, location: FetchChatListLo
                 if groupId == .root || groupId == Namespaces.PeerGroup.archive {
                     folderId = groupId.rawValue
                 } else {
-                    folderId = 0
+                    return .single(Api.messages.Dialogs.dialogsNotModified(count: 0))
                 }
                 return network.request(Api.functions.messages.getDialogs(flags: flags, folderId: folderId, offsetDate: offsetDate, offsetId: offsetId, offsetPeer: offsetPeer, limit: limit, hash: hash))
                 |> retryRequest |> mapToSignal { apiDialogs in
