@@ -384,7 +384,7 @@ func fetchChatList(postbox: Postbox, network: Network, location: FetchChatListLo
                 if case .general = location {
                     for groupId in combinedReferencedFolders {
                         if circlesSettings.groupNames[groupId] != nil {
-                            let peers = circlesSettings.inclusions.keys.filter { circlesSettings.inclusions[$0] == groupId }
+                            /*let peers = circlesSettings.inclusions.keys.filter { circlesSettings.inclusions[$0] == groupId }
                             let flags: Int32 = 1 << 1
                             
                             let requestFeed = getDialogs(flags: flags, groupId: groupId) |> map { result -> (PeerGroupId, ParsedDialogs) in
@@ -392,7 +392,7 @@ func fetchChatList(postbox: Postbox, network: Network, location: FetchChatListLo
                                 let parsedChats = parseDialogs(apiDialogs: extractedData.apiDialogs, apiMessages: extractedData.apiMessages, apiChats: extractedData.apiChats, apiUsers: extractedData.apiUsers, apiIsAtLowestBoundary: extractedData.apiIsAtLowestBoundary)
                                 return (groupId, parsedChats)
                             }
-                            folderSignals.append(requestFeed)
+                            folderSignals.append(requestFeed)*/
                         } else {
                             let flags: Int32 = 1 << 1
                             let requestFeed = network.request(Api.functions.messages.getDialogs(flags: flags, folderId: groupId.rawValue, offsetDate: 0, offsetId: 0, offsetPeer: .inputPeerEmpty, limit: 32, hash: 0))
