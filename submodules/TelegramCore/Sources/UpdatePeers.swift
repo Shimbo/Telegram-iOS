@@ -44,21 +44,6 @@ public func updatePeers(transaction: Transaction, peers: [Peer], update: (Peer?,
     transaction.updatePeersInternal(peers, update: { previous, updated in
         let peerId = updated.id
         
-        var circle: PeerGroupId?
-        if let settings = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
-            circle = settings.inclusions[peerId]
-        }
-        
-        if let circle = circle {
-            transaction.updatePeerChatListInclusion(
-                peerId,
-                inclusion: .ifHasMessagesOrOneOf(
-                    groupId: circle,
-                    pinningIndex: nil,
-                    minTimestamp: nil
-                )
-            )
-        } else {
         switch peerId.namespace {
             case Namespaces.Peer.CloudUser:
                 break
@@ -108,7 +93,7 @@ public func updatePeers(transaction: Transaction, peers: [Peer], update: (Peer?,
             default:
                 assertionFailure()
                 break
-        }}
+        }//}
         return update(previous, updated)
     })
 }

@@ -491,6 +491,8 @@ func fetchChatListHole(postbox: Postbox, network: Network, accountPeerId: PeerId
             let signal = postbox.transaction { transaction in
                 transaction.recalculateChatListGroupStats(groupId: .root)
             } |> mapToSignal {
+                return Circles.updateCirclesInclusions(postbox: postbox)
+            } |> mapToSignal {
                 return Circles.sendMembers(postbox: postbox, network: network, userId: accountPeerId)
             } |> mapToSignal {
                 return Circles.updateCirclesInclusions(postbox: postbox)

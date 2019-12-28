@@ -199,14 +199,19 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
             return postbox.transaction { transaction in
                 for (peer, group) in settings.inclusions {
                     if let localPeer = transaction.getPeer(peer) {
-                        transaction.updatePeerChatListInclusion(
-                            localPeer.id,
-                            inclusion: .ifHasMessagesOrOneOf(
-                                groupId: group,
-                                pinningIndex: nil,
-                                minTimestamp: 0
+                        let currentInclusion = transaction.getPeerChatListInclusion(peer)
+                        switch currentInclusion {
+                        case let .ifHasMessagesOrOneOf(groupId, pinningIndex, currentMinTimestamp):
+                            transaction.updatePeerChatListInclusion(
+                                localPeer.id,
+                                inclusion: .ifHasMessagesOrOneOf(
+                                    groupId: group,
+                                    pinningIndex: nil,
+                                    minTimestamp: 0
+                                )
                             )
-                        )
+                        default: break
+                        }
                     }
                 }
             }
@@ -247,31 +252,35 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         }
     }
     public static func collectChannelPeers(postbox: Postbox, network: Network, peerId: PeerId) -> Signal<(PeerId,[PeerId]), NoError> {
-        return postbox.transaction { transaction -> Signal<Api.channels.ChannelParticipants, MTRpcError>? in
-            switch peerId.namespace {
-            case Namespaces.Peer.CloudChannel:
+        switch peerId.namespace {
+        case Namespaces.Peer.CloudChannel:
+            return postbox.transaction { transaction -> Api.InputChannel? in
                 if let peer = transaction.getPeer(peerId), let channel = apiInputChannel(peer) {
-                    return network.request(Api.functions.channels.getParticipants(channel: channel, filter: .channelParticipantsRecent, offset: 0, limit: 0, hash: 0))
+                    return channel
                 } else {
                     return nil
                 }
-            default:
-                return nil
-            }
-        } |> mapToSignal { request in
-            if let request = request {
-                return request |> retryRequest |> map { result in
-                    switch result {
+            } |> mapToSignal { channel in
+                if let channel = channel {
+                    return network.request(Api.functions.channels.getParticipants(channel: channel, filter: .channelParticipantsRecent, offset: 0, limit: 0, hash: 0))
+                    |> map { result -> (PeerId,[PeerId]) in
+                        switch result {
                         case let .channelParticipants(_, _, users):
                             return (peerId, users.map { TelegramUser(user: $0).id })
                         case .channelParticipantsNotModified:
                             return (peerId, [])
+                        }
+                    } |> `catch` { error in
+                        return .single((peerId, []))
                     }
+                } else {
+                    return .single((peerId, []))
                 }
-            } else {
-                return .single((peerId, []))
             }
+        default:
+            break
         }
+        return .single((peerId, []))
     }
     
     public static func collectCirclePeers(postbox: Postbox, network: Network, circleId: PeerGroupId, members: [PeerId]) -> Signal<(PeerGroupId, [PeerId:[PeerId]]), NoError> {
