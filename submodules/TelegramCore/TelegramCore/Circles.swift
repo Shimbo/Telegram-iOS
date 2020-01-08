@@ -47,6 +47,12 @@ extension PeerGroupId: PostboxCoding, Comparable {
     }
 }*/
 
+extension Notification.Name {
+    static let brokenConnection = Notification.Name("brokenConnection")
+    static let invalidToken = Notification.Name("invalidToken")
+    static let serverError = Notification.Name("serverError")
+}
+
 public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     public static let baseApiUrl = "https://api.circles.is/"
     public static let baseDevApiUrl = "https://api.dev.randomcoffee.us/"
@@ -95,22 +101,21 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     
     public static func settingsView(postbox: Postbox) -> Signal<Circles, NoError> {
         return postbox.preferencesView(keys: [PreferencesKeys.circlesSettings])
-        |> map { view -> Circles in
+        |> mapToSignal { view in
             if let settings = view.values[PreferencesKeys.circlesSettings] as? Circles {
-                return settings
+                return .single(settings)
             } else {
-                return Circles.defaultConfig
+                return Circles.getSettings(postbox: postbox)
             }
-        } |> distinctUntilChanged
+        }
     }
     
     public static func fetch(postbox: Postbox, userId: PeerId) -> Signal<Void, NoError> {
         return Circles.getSettings(postbox: postbox)
-        |> mapToSignal { settings -> Signal<[ApiCircle],NoError> in
+        |> mapToSignal { settings -> Signal<Void,NoError> in
             if let token = settings.token {
-                return Signal<[ApiCircle], NoError> { subscriber in
+                let signal = Signal<[ApiCircle]?, NoError> { subscriber in
                     let urlString = settings.url+"tgfork"
-                    //let urlString = "https://my-json-server.typicode.com/michaelenco/fakeapi/circles"
                     let url = URL(string: urlString)!
                     var request = URLRequest(url: url)
                     request.setValue(token, forHTTPHeaderField: "Authorization")
@@ -118,12 +123,18 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                         guard let data = data,
                             let response = response as? HTTPURLResponse,
                             error == nil else {
-                                subscriber.putNext([])
+                                NotificationCenter.default.post(name: .brokenConnection, object: nil)
+                                subscriber.putNext(nil)
                                 subscriber.putCompletion()
                                 return
                             }
                         guard (200 ... 299) ~= response.statusCode else {
-                            subscriber.putNext([])
+                            if response.statusCode == 401 {
+                                NotificationCenter.default.post(name: .invalidToken, object: nil)
+                            } else {
+                                NotificationCenter.default.post(name: .serverError, object: nil)
+                            }
+                            subscriber.putNext(nil)
                             subscriber.putCompletion()
                             return
                         }
@@ -172,24 +183,30 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                     task.resume()
                     return EmptyDisposable
                 }
-            } else {
-                return .single([])
-            }
-        } |> mapToSignal { circles in
-            return Circles.updateSettings(postbox: postbox) { entry in
-                entry.groupNames = [:]
-                entry.remoteInclusions = [:]
-                entry.index = [:]
-                for c in circles {
-                    entry.index[c.id] = Int32(c.index)
-                    entry.groupNames[c.id] = c.name
-                    for peer in c.peers {
-                        if peer != userId {
-                            entry.remoteInclusions[peer] = c.id
+                return signal |> mapToSignal { circles in
+                    if let circles = circles {
+                        return Circles.updateSettings(postbox: postbox) { entry in
+                            entry.groupNames = [:]
+                            entry.remoteInclusions = [:]
+                            entry.index = [:]
+                            for c in circles {
+                                entry.index[c.id] = Int32(c.index)
+                                entry.groupNames[c.id] = c.name
+                                for peer in c.peers {
+                                    if peer != userId {
+                                        entry.remoteInclusions[peer] = c.id
+                                    }
+                                }
+                            }
+                            return entry
                         }
+                    } else {
+                        return .single(Void())
                     }
                 }
-                return entry
+            } else {
+                NotificationCenter.default.post(name: .invalidToken, object: nil)
+                return .single(Void())
             }
         }
     }
@@ -201,7 +218,61 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                     if let localPeer = transaction.getPeer(peer) {
                         let currentInclusion = transaction.getPeerChatListInclusion(peer)
                         switch currentInclusion {
-                        case let .ifHasMessagesOrOneOf(groupId, pinningIndex, currentMinTimestamp):
+                        case .notIncluded:
+                            switch localPeer.id.namespace {
+                            case Namespaces.Peer.CloudGroup:
+                                if let chat = localPeer as? TelegramGroup {
+                                    if chat.flags.contains(.deactivated) {
+                                        transaction.updatePeerChatListInclusion(peer, inclusion: .notIncluded)
+                                        print("group is deactivated, so it wasnt added to circle:")
+                                        print(peer)
+                                    } else {
+                                        switch chat.membership {
+                                            case .Member:
+                                                transaction.updatePeerChatListInclusion(
+                                                    localPeer.id,
+                                                    inclusion: .ifHasMessagesOrOneOf(
+                                                        groupId: group,
+                                                        pinningIndex: nil,
+                                                        minTimestamp: 0
+                                                    )
+                                                )
+                                            default:
+                                                transaction.updatePeerChatListInclusion(peer, inclusion: .notIncluded)
+                                                print("user isnt group member, so group wasnt added to circle:")
+                                                print(peer)
+                                        }
+                                    }
+                                }
+                            case Namespaces.Peer.CloudChannel:
+                                if let channel = localPeer as? TelegramChannel {
+                                    switch channel.participationStatus {
+                                        case .member:
+                                            transaction.updatePeerChatListInclusion(
+                                                localPeer.id,
+                                                inclusion: .ifHasMessagesOrOneOf(
+                                                    groupId: group,
+                                                    pinningIndex: nil,
+                                                    minTimestamp: 0
+                                                )
+                                            )
+                                        default:
+                                            transaction.updatePeerChatListInclusion(peer, inclusion: .notIncluded)
+                                    }
+                                } else {
+                                    transaction.updatePeerChatListInclusion(peer, inclusion: .notIncluded)
+                                }
+                            default:
+                                transaction.updatePeerChatListInclusion(
+                                    localPeer.id,
+                                    inclusion: .ifHasMessagesOrOneOf(
+                                        groupId: group,
+                                        pinningIndex: nil,
+                                        minTimestamp: 0
+                                    )
+                                )
+                            }
+                        default:
                             transaction.updatePeerChatListInclusion(
                                 localPeer.id,
                                 inclusion: .ifHasMessagesOrOneOf(
@@ -210,16 +281,62 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                                     minTimestamp: 0
                                 )
                             )
-                        default: break
                         }
                     }
+                }
+            } |> mapToSignal {
+                return postbox.transaction { transaction in
+                    for group in settings.groupNames.keys {
+                        transaction.recalculateChatListGroupStats(groupId: group)
+                    }
+                    transaction.recalculateChatListGroupStats(groupId: .root)
+                }
+            }
+        }
+    }
+    
+    public static func requestToken(postbox: Postbox, account: Account) -> Signal<Void, NoError> {
+        return Circles.getSettings(postbox: postbox) |> mapToSignal { settings in
+            var peerSignal:Signal<PeerId?, NoError>
+            if let botId = settings.botPeerId {
+                peerSignal = .single(botId)
+            } else {
+                peerSignal = resolvePeerByName(account: account, name: settings.botName)
+                |> mapToSignal { peerId -> Signal<Peer?, NoError> in
+                    if let peerId = peerId {
+                        return postbox.loadedPeerWithId(peerId) |> map {Optional($0)}
+                    } else {
+                        return .single(nil)
+                    }
+                } |> mapToSignal { peer in
+                    if let peer = peer {
+                        settings.botPeerId = peer.id
+                        return Circles.updateSettings(postbox: postbox) { entry in
+                            let newValue = Circles.defaultConfig
+                            newValue.dev = entry.dev
+                            newValue.botPeerId = peer.id
+                            newValue.localInclusions = entry.localInclusions
+                            return newValue
+                        } |> map { peer.id }
+                    } else {
+                        return .single(nil)
+                    }
+                }
+            }
+            
+            return peerSignal |> mapToSignal { peerId in
+                if let peerId = peerId {
+                    return standaloneSendMessage(account: account, peerId: peerId, text: "/start api", attributes: [], media: nil, replyToMessageId: nil) |> `catch` {_ in return .complete()} |> map {_ in return Void()}
+                } else {
+                    return .single(Void())
                 }
             }
         }
     }
     
     public static func updateCircles(postbox: Postbox, network: Network, accountPeerId: PeerId) -> Signal<Void, NoError> {
-        return Circles.fetch(postbox: postbox, userId: accountPeerId) |> mapToSignal {
+        return Circles.fetch(postbox: postbox, userId: accountPeerId)
+        |> mapToSignal {
             return Circles.sendMembers(postbox: postbox, network: network, userId: accountPeerId)
         } |> mapToSignal {
             return Circles.updateCirclesInclusions(postbox: postbox)
@@ -227,28 +344,15 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     }
     
     public static func collectGroupPeers(postbox: Postbox, network: Network, peerId: PeerId) -> Signal<(PeerId,[PeerId]), NoError> {
-        return postbox.transaction { transaction -> Signal<Api.messages.ChatFull, MTRpcError>? in
-            switch peerId.namespace {
-            case Namespaces.Peer.CloudGroup:
-                if let peer = transaction.getPeer(peerId){
-                    return network.request(Api.functions.messages.getFullChat(chatId: peerId.id))
-                } else {
-                    return nil
-                }
-            default:
-                return nil
+        return network.request(Api.functions.messages.getFullChat(chatId: peerId.id))
+        |> retryRequest
+        |> map { result in
+            switch result {
+            case let .chatFull(chatFull, chats, users):
+                return (peerId, users.map { TelegramUser(user: $0).id })
             }
-        } |> mapToSignal { request in
-            if let request = request {
-                return request |> retryRequest |> map { result in
-                    switch result {
-                    case let .chatFull(chatFull, chats, users):
-                        return (peerId, users.map { TelegramUser(user: $0).id })
-                    }
-                }
-            } else {
-                return .single((peerId, []))
-            }
+        } |> `catch` { error in
+            return .single((peerId, []))
         }
     }
     public static func collectChannelPeers(postbox: Postbox, network: Network, peerId: PeerId) -> Signal<(PeerId,[PeerId]), NoError> {
@@ -395,8 +499,6 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                             entry.token = token
                             return entry
                         } |> mapToSignal {
-                            return Circles.updateCircles(postbox: postbox, network: network, accountPeerId: accountPeerId)
-                        } |> mapToSignal {
                             return postbox.transaction { transaction in
                                 return transaction.getPeer(botId)
                             }
@@ -429,6 +531,8 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                                 }
                             }
                             return deleteMessagesInteractively(postbox: postbox, messageIds: messagesToRemove, type: .forEveryone, deleteAllInGroup: false)
+                        } |> mapToSignal {
+                            return Circles.updateCircles(postbox: postbox, network: network, accountPeerId: accountPeerId)
                         }
                     } else if case let .message(_,_,fromId,_,_,_,_,_,_,_,_,_,_,_,_,_,_) = message, fromId == botId.id {
                         return Circles.updateCircles(postbox: postbox, network: network, accountPeerId: accountPeerId)

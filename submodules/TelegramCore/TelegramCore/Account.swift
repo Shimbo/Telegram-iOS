@@ -1343,46 +1343,15 @@ public class Account {
             }
         })
         
-        let signal = self.viewTracker.tailChatListView(groupId: .root, count: 10) |> take(1)
+        let signal = self.viewTracker.tailChatListView(groupId: .root, count: 10) |> take(1) 
         |> mapToSignal { _ in
             return Circles.getSettings(postbox: postbox)
-        } |> mapToSignal { settings -> Signal<Void,NoError> in
-            var peerSignal:Signal<PeerId?, NoError>
-            if let botId = settings.botPeerId {
-                peerSignal = .single(botId)
+        } |> mapToSignal { settings -> Signal<Void, NoError> in
+            if settings.token == nil {
+                return Circles.requestToken(postbox: postbox, account: self)
             } else {
-                peerSignal = resolvePeerByName(account: self, name: settings.botName)
-                |> mapToSignal { peerId -> Signal<Peer?, NoError> in
-                    if let peerId = peerId {
-                        return postbox.loadedPeerWithId(peerId) |> map {Optional($0)}
-                    } else {
-                        return .single(nil)
-                    }
-                } |> mapToSignal { peer in
-                    if let peer = peer {
-                        settings.botPeerId = peer.id
-                        return Circles.updateSettings(postbox: postbox) { entry in
-                            let newValue = Circles.defaultConfig
-                            newValue.dev = entry.dev
-                            newValue.botPeerId = peer.id
-                            newValue.localInclusions = entry.localInclusions
-                            return newValue
-                        } |> map { peer.id }
-                    } else {
-                        return .single(nil)
-                    }
-                }
+                return Circles.updateCircles(postbox: postbox, network: network, accountPeerId: self.peerId)
             }
-            
-            return peerSignal |> mapToSignal { peerId in
-                if let peerId = peerId, settings.token == nil {
-                    return standaloneSendMessage(account: self, peerId: peerId, text: "/start api", attributes: [], media: nil, replyToMessageId: nil) |> `catch` {_ in return .complete()} |> map {_ in return Void()}
-                } else {
-                    return .single(Void())
-                }
-            }
-        } |> mapToSignal {
-            return Circles.updateCircles(postbox: postbox, network: network, accountPeerId: self.peerId)
         }
         self.managedOperationsDisposable.add(signal.start())
     }
