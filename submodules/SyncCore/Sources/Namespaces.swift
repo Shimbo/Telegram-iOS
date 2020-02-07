@@ -198,6 +198,7 @@ private enum PreferencesKeyValues: Int32 {
     case walletCollection = 18
     case contentSettings = 19
     case circlesSettings = 314
+    case chatListFilters = 20
 }
 
 public func applicationSpecificPreferencesKey(_ value: Int32) -> ValueBoxKey {
@@ -313,7 +314,12 @@ public struct PreferencesKeys {
         key.setInt32(0, value: PreferencesKeyValues.circlesSettings.rawValue)
         return key
     }()
-}
+    
+    public static let chatListFilters: ValueBoxKey = {
+        let key = ValueBoxKey(length: 4)
+        key.setInt32(0, value: PreferencesKeyValues.chatListFilters.rawValue)
+        return key
+    }()
 
 private enum SharedDataKeyValues: Int32 {
     case loggingSettings = 0
