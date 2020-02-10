@@ -19,10 +19,22 @@ func updatePeerChatInclusionWithMinTimestamp(transaction: Transaction, id: PeerI
             } else {
                 updatedMinTimestamp = minTimestamp
             }
-            updatedInclusion = .ifHasMessagesOrOneOf(groupId: groupId, pinningIndex: pinningIndex, minTimestamp: updatedMinTimestamp)
+            var modifiedGroup: PeerGroupId = groupId
+            if let settings = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
+                if let circleId = settings.inclusions[id] {
+                    modifiedGroup = circleId
+                }
+            }
+            updatedInclusion = .ifHasMessagesOrOneOf(groupId: modifiedGroup, pinningIndex: pinningIndex, minTimestamp: updatedMinTimestamp)
         default:
             if forceRootGroupIfNotExists {
-                updatedInclusion = .ifHasMessagesOrOneOf(groupId: .root, pinningIndex: nil, minTimestamp: minTimestamp)
+                var modifiedGroup: PeerGroupId = .root
+                if let settings = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
+                    if let circleId = settings.inclusions[id] {
+                        modifiedGroup = circleId
+                    }
+                }
+                updatedInclusion = .ifHasMessagesOrOneOf(groupId: modifiedGroup, pinningIndex: nil, minTimestamp: minTimestamp)
             }
     }
     if let updatedInclusion = updatedInclusion {

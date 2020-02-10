@@ -243,7 +243,6 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                             case Namespaces.Peer.CloudGroup:
                                 if let chat = localPeer as? TelegramGroup {
                                     if chat.flags.contains(.deactivated) {
-                                        transaction.updatePeerChatListInclusion(peer, inclusion: .notIncluded)
                                         print("group is deactivated, so it wasnt added to circle:")
                                         print(peer)
                                     } else {
@@ -258,7 +257,6 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                                                     )
                                                 )
                                             default:
-                                                transaction.updatePeerChatListInclusion(peer, inclusion: .notIncluded)
                                                 print("user isnt group member, so group wasnt added to circle:")
                                                 print(peer)
                                         }
@@ -277,10 +275,9 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                                                 )
                                             )
                                         default:
-                                            transaction.updatePeerChatListInclusion(peer, inclusion: .notIncluded)
+                                            print("user isnt group member, so group wasnt added to circle:")
+                                            print(peer)
                                     }
-                                } else {
-                                    transaction.updatePeerChatListInclusion(peer, inclusion: .notIncluded)
                                 }
                             case Namespaces.Peer.CloudUser:
                                 if transaction.getTopPeerMessageId(peerId: localPeer.id, namespace: Namespaces.Message.Cloud) != nil {
