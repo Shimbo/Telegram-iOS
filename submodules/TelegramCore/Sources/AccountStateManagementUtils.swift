@@ -2326,7 +2326,14 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                     default:
                         break
                 }
-                transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: groupId, pinningIndex: currentPinningIndex, minTimestamp: currentMinTimestamp))
+                
+                var modifiedGroup: PeerGroupId = groupId
+                if let settings = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
+                    if let circleId = settings.inclusions[peerId] {
+                        modifiedGroup = circleId
+                    }
+                }
+                transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: modifiedGroup, pinningIndex: currentPinningIndex, minTimestamp: currentMinTimestamp))
                 if changedGroup {
                     invalidateGroupStats.insert(Namespaces.PeerGroup.archive)
                 }

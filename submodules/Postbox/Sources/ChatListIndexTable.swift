@@ -325,24 +325,7 @@ final class ChatListIndexTable: Table {
             }
             
             func alterNamespace(summary: inout PeerGroupUnreadCountersSummary, previousState: PeerReadState?, updatedState: PeerReadState?, previousStateFiltered: PeerReadState?, updatedStateFiltered: PeerReadState?) {
-                let previousCount = previousState?.count ?? 0
-                let updatedCount = updatedState?.count ?? 0
                 
-                let previousCountFiltered = previousStateFiltered?.count ?? 0
-                let updatedCountFiltered = updatedStateFiltered?.count ?? 0
-                
-                if previousCount != updatedCount {
-                    if (previousCount != 0) != (updatedCount != 0) {
-                        if updatedCount != 0 {
-                            summary.all.chatCount += 1
-                        } else {
-                            summary.all.chatCount -= 1
-                            summary.all.chatCount = max(0, summary.all.chatCount)
-                        }
-                    }
-                    summary.all.messageCount += updatedCount - previousCount
-                    summary.all.messageCount = max(0, summary.all.messageCount)
-                }
                 let prevUnread:Bool = previousState?.markedUnread ?? false
                 let updatedUnread:Bool = updatedState?.markedUnread ?? false
                 if prevUnread != updatedUnread {
@@ -352,11 +335,44 @@ final class ChatListIndexTable: Table {
                         summary.all.chatCount += 1
                     }
                 }
+
+                let previousCount = previousState?.count ?? 0
+                let updatedCount = updatedState?.count ?? 0
                 
+                if previousCount != updatedCount {
+                    if (previousCount != 0) != (updatedCount != 0) {
+                        if updatedCount != 0 {
+                            if !prevUnread && !updatedUnread {
+                                summary.all.chatCount += 1
+                            }
+                        } else {
+                            summary.all.chatCount -= 1
+                            summary.all.chatCount = max(0, summary.all.chatCount)
+                        }
+                    }
+                    summary.all.messageCount += updatedCount - previousCount
+                    summary.all.messageCount = max(0, summary.all.messageCount)
+                }
+                            
+                let prevFilteredUnread:Bool = previousStateFiltered?.markedUnread ?? false
+                let updatedFilteredUnread:Bool = updatedStateFiltered?.markedUnread ?? false
+                
+                let previousCountFiltered = previousStateFiltered?.count ?? 0
+                let updatedCountFiltered = updatedStateFiltered?.count ?? 0               
+                
+                if prevFilteredUnread != updatedFilteredUnread {
+                    if prevUnread {
+                        summary.filtered.chatCount -= 1
+                    } else {
+                        summary.filtered.chatCount += 1
+                    }
+                }
                 if previousCountFiltered != updatedCountFiltered {
                     if (previousCountFiltered != 0) != (updatedCountFiltered != 0) {
                         if updatedCountFiltered != 0 {
-                            summary.filtered.chatCount += 1
+                            if !prevFilteredUnread && !updatedFilteredUnread {
+                                summary.filtered.chatCount += 1
+                            }
                         } else {
                             summary.filtered.chatCount -= 1
                             summary.filtered.chatCount = max(0, summary.filtered.chatCount)
@@ -364,15 +380,6 @@ final class ChatListIndexTable: Table {
                     }
                     summary.filtered.messageCount += updatedCountFiltered - previousCountFiltered
                     summary.filtered.messageCount = max(0, summary.filtered.messageCount)
-                }
-                let prevFilteredUnread:Bool = previousStateFiltered?.markedUnread ?? false
-                let updatedFilteredUnread:Bool = updatedStateFiltered?.markedUnread ?? false
-                if prevFilteredUnread != updatedFilteredUnread {
-                    if prevUnread {
-                        summary.filtered.chatCount -= 1
-                    } else {
-                        summary.filtered.chatCount += 1
-                    }
                 }
             }
             
@@ -723,8 +730,7 @@ final class ChatListIndexTable: Table {
                             summary.namespaces[namespace]!.filtered.chatCount += 1
                             summary.namespaces[namespace]!.filtered.messageCount += state.count
                         }
-                    }
-                    if state.markedUnread {
+                    } else if state.markedUnread {
                         summary.namespaces[namespace]!.all.chatCount += 1
                         if let settings = notificationSettings, !settings.isRemovedFromTotalUnreadCount {
                             summary.namespaces[namespace]!.filtered.chatCount += 1
