@@ -778,7 +778,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     public init(decoder: PostboxDecoder) {
         self.dev = decoder.decodeBoolForKey("d", orElse: false)
         self.token = decoder.decodeOptionalStringForKey("ct")
-        self.botPeerId = PeerId(decoder.decodeInt64ForKey("bpi", orElse: 1234))
+        self.botPeerId = PeerId(decoder.decodeInt64ForKey("bpi", orElse: 0))
         
         self.index = decoder.decodeObjectDictionaryForKey(
             "i",
