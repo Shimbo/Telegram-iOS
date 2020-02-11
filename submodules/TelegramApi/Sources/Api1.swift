@@ -20762,10 +20762,17 @@ public extension Api {
     
     }
     public enum Theme: TypeConstructorDescription {
+        case themeDocumentNotModified
         case theme(flags: Int32, id: Int64, accessHash: Int64, slug: String, title: String, document: Api.Document?, settings: Api.ThemeSettings?, installsCount: Int32)
     
     public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
     switch self {
+                case .themeDocumentNotModified:
+                    if boxed {
+                        buffer.appendInt32(1211967244)
+                    }
+                    
+                    break
                 case .theme(let flags, let id, let accessHash, let slug, let title, let document, let settings, let installsCount):
                     if boxed {
                         buffer.appendInt32(42930452)
@@ -20784,11 +20791,16 @@ public extension Api {
     
     public func descriptionFields() -> (String, [(String, Any)]) {
         switch self {
+                case .themeDocumentNotModified:
+                return ("themeDocumentNotModified", [])
                 case .theme(let flags, let id, let accessHash, let slug, let title, let document, let settings, let installsCount):
                 return ("theme", [("flags", flags), ("id", id), ("accessHash", accessHash), ("slug", slug), ("title", title), ("document", document), ("settings", settings), ("installsCount", installsCount)])
     }
     }
     
+        public static func parse_themeDocumentNotModified(_ reader: BufferReader) -> Theme? {
+            return Api.Theme.themeDocumentNotModified
+        }
         public static func parse_theme(_ reader: BufferReader) -> Theme? {
             var _1: Int32?
             _1 = reader.readInt32()
@@ -22113,6 +22125,7 @@ public extension Api {
     }
     public enum PeerLocated: TypeConstructorDescription {
         case peerLocated(peer: Api.Peer, expires: Int32, distance: Int32)
+        case peerSelfLocated(expires: Int32)
     
     public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
     switch self {
@@ -22124,6 +22137,12 @@ public extension Api {
                     serializeInt32(expires, buffer: buffer, boxed: false)
                     serializeInt32(distance, buffer: buffer, boxed: false)
                     break
+                case .peerSelfLocated(let expires):
+                    if boxed {
+                        buffer.appendInt32(-118740917)
+                    }
+                    serializeInt32(expires, buffer: buffer, boxed: false)
+                    break
     }
     }
     
@@ -22131,6 +22150,8 @@ public extension Api {
         switch self {
                 case .peerLocated(let peer, let expires, let distance):
                 return ("peerLocated", [("peer", peer), ("expires", expires), ("distance", distance)])
+                case .peerSelfLocated(let expires):
+                return ("peerSelfLocated", [("expires", expires)])
     }
     }
     
@@ -22148,6 +22169,17 @@ public extension Api {
             let _c3 = _3 != nil
             if _c1 && _c2 && _c3 {
                 return Api.PeerLocated.peerLocated(peer: _1!, expires: _2!, distance: _3!)
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_peerSelfLocated(_ reader: BufferReader) -> PeerLocated? {
+            var _1: Int32?
+            _1 = reader.readInt32()
+            let _c1 = _1 != nil
+            if _c1 {
+                return Api.PeerLocated.peerSelfLocated(expires: _1!)
             }
             else {
                 return nil
