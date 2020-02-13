@@ -541,8 +541,8 @@ public final class AccountStateManager {
                 let mediaBox = postbox.mediaBox
                 let queue = self.queue
                 let signal = initialStateWithUpdateGroups(postbox: postbox, groups: groups)
-                |> mapToSignal { state -> Signal<(AccountReplayedFinalState?, AccountFinalState), NoError> in
-                    return finalStateWithUpdateGroups(postbox: postbox, network: network, state: state, groups: groups, accountPeerId: self.accountPeerId)
+                |> mapToSignal { [weak self] state -> Signal<(AccountReplayedFinalState?, AccountFinalState), NoError> in
+                    return finalStateWithUpdateGroups(postbox: postbox, network: network, state: state, groups: groups, accountPeerId: accountPeerId)
                     |> deliverOn(queue)
                     |> mapToSignal { finalState in
                         if !finalState.discard && !finalState.state.preCachedResources.isEmpty {

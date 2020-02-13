@@ -1,15 +1,9 @@
 import Foundation
-#if os(macOS)
-    import PostboxMac
-    import TelegramApiMac
-    import MtProtoKitMac
-#else
-    import Postbox
-    import TelegramApi
-    import MtProtoKit
-#endif
-
-import SwiftSignalKitMac
+import Postbox
+import TelegramApi
+import MtProtoKit
+import SwiftSignalKit
+import SyncCore
 
 extension String: PostboxCoding {
     public func encode(_ encoder: PostboxEncoder) {

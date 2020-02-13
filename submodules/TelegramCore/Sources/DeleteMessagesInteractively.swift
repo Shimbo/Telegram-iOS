@@ -6,6 +6,12 @@ import MtProtoKit
 
 import SyncCore
 
+public func deleteMessagesInteractively(postbox: Postbox, messageIds: [MessageId], type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false) -> Signal<Void, NoError> {
+    return postbox.transaction { transaction -> Void in
+        deleteMessagesInteractively(transaction: transaction, stateManager: nil, postbox: postbox, messageIds: messageIds, type: type, removeIfPossiblyDelivered: true)
+    }
+}
+
 public func deleteMessagesInteractively(account: Account, messageIds: [MessageId], type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false) -> Signal<Void, NoError> {
     return account.postbox.transaction { transaction -> Void in
         deleteMessagesInteractively(transaction: transaction, stateManager: account.stateManager, postbox: account.postbox, messageIds: messageIds, type: type, removeIfPossiblyDelivered: true)
