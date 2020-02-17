@@ -32,14 +32,14 @@ extension PeerGroupId: PostboxCoding, Comparable {
     static public func < (lhs: PeerGroupId, rhs: PeerGroupId) -> Bool { return lhs.rawValue < rhs.rawValue }
 }
 
-/*extension PeerId: PostboxCoding {
+extension PeerId: PostboxCoding {
     public func encode(_ encoder: PostboxEncoder) {
         encoder.encodeInt64(self.toInt64(), forKey: "peerid")
     }
     public init(decoder: PostboxDecoder) {
         self = PeerId(decoder.decodeInt64ForKey("peerid", orElse: 0))
     }
-}*/
+}
 
 extension Notification.Name {
     static let brokenConnection = Notification.Name("brokenConnection")
@@ -88,28 +88,36 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
 
     public static func getSettings(postbox: Postbox) -> Signal<Circles, NoError> {
         return postbox.transaction { transaction -> Circles in
-            if let entry = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
-                return entry
-            } else {
-                return Circles.defaultConfig
-            }
+            return Circles.getSettings(transaction: transaction)
+        }
+    }
+    public static func getSettings(transaction: Transaction) -> Circles {
+        if let entry = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
+            return entry
+        } else {
+            return Circles.defaultConfig
         }
     }
 
     public static func updateSettings(postbox: Postbox, _ f: @escaping(Circles) -> Circles) -> Signal<Void, NoError> {
         return postbox.transaction { transaction in
-            return transaction.updatePreferencesEntry(key: PreferencesKeys.circlesSettings) { old in
-                let newValue = Circles.defaultConfig
-                if let old = old as? Circles {
-                    newValue.dev = old.dev
-                    newValue.botPeerId = old.botPeerId
-                    newValue.token = old.token
-                    newValue.remoteInclusions = old.remoteInclusions
-                    newValue.groupNames = old.groupNames
-                    newValue.index = old.index
-                }
-                return f(newValue)
+            return Circles.updateSettings(transaction: transaction, f)
+        }
+    }
+    public static func updateSettings(transaction: Transaction, _ f: @escaping(Circles) -> Circles) {
+        return transaction.updatePreferencesEntry(key: PreferencesKeys.circlesSettings) { old in
+            let newValue = Circles.defaultConfig
+            if let old = old as? Circles {
+                newValue.dev = old.dev
+                newValue.botPeerId = old.botPeerId
+                newValue.token = old.token
+                newValue.remoteInclusions = old.remoteInclusions
+                newValue.groupNames = old.groupNames
+                newValue.index = old.index
+                newValue.currentCircle = old.currentCircle
+                newValue.lastCirclePeer = old.lastCirclePeer
             }
+            return f(newValue)
         }
     }
     
@@ -738,6 +746,8 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     public var remoteInclusions: Dictionary<PeerId, PeerGroupId> = [:]
     public var dev: Bool
     public var index: Dictionary<PeerGroupId, Int32> = [:]
+    public var lastCirclePeer: Dictionary<PeerGroupId, PeerId> = [:]
+    public var currentCircle = PeerGroupId(rawValue: 0)
     
     public var botPeerId: PeerId?
     
@@ -792,6 +802,13 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                 PeerId($0.decodeInt64ForKey("k", orElse: 0))
             }
         )
+        self.currentCircle = PeerGroupId(rawValue: decoder.decodeInt32ForKey("cc", orElse: 0))
+        self.lastCirclePeer = decoder.decodeObjectDictionaryForKey(
+            "lcp",
+            keyDecoder: {
+                PeerGroupId(rawValue: $0.decodeInt32ForKey("k", orElse: 0))
+            }
+        )
     }
     
     public func encode(_ encoder: PostboxEncoder) {
@@ -816,6 +833,11 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         encoder.encodeObjectDictionary(self.remoteInclusions , forKey: "ri", keyEncoder: {
             $1.encodeInt64($0.toInt64(), forKey: "k")
         })
+        
+        encoder.encodeInt32(currentCircle.rawValue, forKey: "cc")
+        encoder.encodeObjectDictionary(self.lastCirclePeer , forKey: "lcp", keyEncoder: {
+            $1.encodeInt32($0.rawValue, forKey: "k")
+        })
     }
     
     public func getTokenFromMessage(message: Api.Message) -> String? {
@@ -830,7 +852,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     }
     
     public static func == (lhs: Circles, rhs: Circles) -> Bool {
-        return lhs.token == rhs.token && lhs.dev == rhs.dev && lhs.groupNames == rhs.groupNames && lhs.remoteInclusions == rhs.remoteInclusions && lhs.index == rhs.index
+        return lhs.token == rhs.token && lhs.dev == rhs.dev && lhs.groupNames == rhs.groupNames && lhs.remoteInclusions == rhs.remoteInclusions && lhs.index == rhs.index && lhs.lastCirclePeer == rhs.lastCirclePeer && lhs.currentCircle == rhs.currentCircle
     }
 }
 
