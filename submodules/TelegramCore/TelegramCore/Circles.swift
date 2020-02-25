@@ -51,8 +51,8 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     public static let baseApiUrl = "https://api.circles.is/"
     public static let baseDevApiUrl = "https://api.dev.randomcoffee.us/"
     
-    public static let botName:String = "@circlesadminbot"
-    public static let botNameDev:String = "@circlesdevbot"
+    public static let botName:String = "@TelefrostConciergeBot"
+    public static let botNameDev:String = "@TelefrostDevBot"
     public static var defaultConfig:Circles {
         return Circles()
     }
