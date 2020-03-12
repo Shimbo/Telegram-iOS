@@ -407,12 +407,14 @@ public final class ChatListNode: ListView {
     }
     
     private var hapticFeedback: HapticFeedback?
+    public var circleSettings: Circles?
     
-    public init(context: AccountContext, groupId: PeerGroupId, previewing: Bool, controlsHistoryPreload: Bool, mode: ChatListNodeMode, theme: PresentationTheme, fontSize: PresentationFontSize, strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat, nameSortOrder: PresentationPersonNameOrder, nameDisplayOrder: PresentationPersonNameOrder, disableAnimations: Bool) {
+    public init(context: AccountContext, groupId: PeerGroupId, previewing: Bool, controlsHistoryPreload: Bool, mode: ChatListNodeMode, theme: PresentationTheme, fontSize: PresentationFontSize, strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat, nameSortOrder: PresentationPersonNameOrder, nameDisplayOrder: PresentationPersonNameOrder, disableAnimations: Bool, circleSettings: Circles? = nil) {
         self.context = context
         self.groupId = groupId
         self.controlsHistoryPreload = controlsHistoryPreload
         self.mode = mode
+        self.circleSettings = circleSettings
         
         self.currentState = ChatListNodeState(presentationData: ChatListPresentationData(theme: theme, fontSize: fontSize, strings: strings, dateTimeFormat: dateTimeFormat, nameSortOrder: nameSortOrder, nameDisplayOrder: nameDisplayOrder, disableAnimations: disableAnimations), editing: false, peerIdWithRevealedOptions: nil, selectedPeerIds: Set(), peerInputActivities: nil, pendingRemovalPeerIds: Set(), pendingClearHistoryPeerIds: Set(), archiveShouldBeTemporaryRevealed: false)
         self.statePromise = ValuePromise(self.currentState, ignoreRepeated: true)
@@ -628,6 +630,8 @@ public final class ChatListNode: ListView {
                             
                             return true
                         }
+                case .GroupReferenceEntry(_, _, let groupId, _, _, _, _, _, _):
+                    return groupId == Namespaces.PeerGroup.archive
                     default:
                         return true
                 }

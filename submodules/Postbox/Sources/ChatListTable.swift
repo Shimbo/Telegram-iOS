@@ -410,6 +410,13 @@ final class ChatListTable: Table {
         if lowerEntries.count != 0 && lowerEntries.count + upperEntries.count < count {
             var additionalLowerEntries: [ChatListIntermediateEntry] = []
             let startEntryType: ChatListEntryType
+            if
+                groupId != .root,
+                let first = lowerEntries.first,
+                case .hole = first
+            {
+                lowerEntries.removeFirst()    
+            }
             switch lowerEntries.last! {
                 case .message:
                     startEntryType = .message

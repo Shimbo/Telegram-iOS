@@ -139,17 +139,21 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
     
     private var searchContentNode: NavigationBarSearchContentNode?
     
+    private var circleViewController: CircleMenuController?
+    private let circlesSettings: Circles?
+    
     public override func updateNavigationCustomData(_ data: Any?, progress: CGFloat, transition: ContainedViewLayoutTransition) {
         if self.isNodeLoaded {
             self.chatListDisplayNode.chatListNode.updateSelectedChatLocation(data as? ChatLocation, progress: progress, transition: transition)
         }
     }
     
-    public init(context: AccountContext, groupId: PeerGroupId, controlsHistoryPreload: Bool, hideNetworkActivityStatus: Bool = false, previewing: Bool = false, enableDebugActions: Bool) {
+    public init(context: AccountContext, groupId: PeerGroupId, controlsHistoryPreload: Bool, hideNetworkActivityStatus: Bool = false, previewing: Bool = false, enableDebugActions: Bool, circlesSettings: Circles? = nil) {
         self.context = context
         self.controlsHistoryPreload = controlsHistoryPreload
         self.hideNetworkActivityStatus = hideNetworkActivityStatus
         
+        self.circlesSettings = circlesSettings
         self.groupId = groupId
         self.previewing = previewing
         
@@ -164,8 +168,10 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
         
         let title: String
         if case .root = self.groupId {
-            title = self.presentationData.strings.DialogList_Title
+            title = "Personal"
             self.navigationBar?.item = nil
+        } else if let circles = circlesSettings, self.groupId != Namespaces.PeerGroup.archive {
+            title = circles.groupNames[groupId]!
         } else {
             title = self.presentationData.strings.ChatList_ArchivedChatsTitle
         }
@@ -265,7 +271,9 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
                 if let strongSelf = self {
                     let defaultTitle: String
                     if case .root = strongSelf.groupId {
-                        defaultTitle = strongSelf.presentationData.strings.DialogList_Title
+                        defaultTitle = "Personal"
+                    } else if let circles = strongSelf.circlesSettings, strongSelf.groupId != Namespaces.PeerGroup.archive {
+                        defaultTitle = circles.groupNames[strongSelf.groupId]!
                     } else {
                         defaultTitle = strongSelf.presentationData.strings.ChatList_ArchivedChatsTitle
                     }
@@ -345,9 +353,12 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
         })
         
         self.titleView.toggleIsLocked = { [weak self] in
-            if let strongSelf = self {
-                strongSelf.context.sharedContext.appLockContext.lock()
-            }
+            guard let self = self else { return }
+            self.context.sharedContext.appLockContext.lock()
+            self.circleViewController = CircleMenuController(context: self.context, groupSelected: { [weak self] (group) in
+                self?.onGroupSelected(groupId: group)
+            })
+            self.present(self.circleViewController!, in: .window(.root))
         }
         
         self.titleView.openProxySettings = { [weak self] in
@@ -447,7 +458,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
     }
     
     override public func loadDisplayNode() {
-        self.displayNode = ChatListControllerNode(context: self.context, groupId: self.groupId, previewing: self.previewing, controlsHistoryPreload: self.controlsHistoryPreload, presentationData: self.presentationData, controller: self)
+        self.displayNode = ChatListControllerNode(context: self.context, groupId: self.groupId, previewing: self.previewing, controlsHistoryPreload: self.controlsHistoryPreload, presentationData: self.presentationData, controller: self, circlesSettings: self.circlesSettings)
         
         self.chatListDisplayNode.navigationBar = self.navigationBar
         
@@ -511,14 +522,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
         }
         
         self.chatListDisplayNode.chatListNode.groupSelected = { [weak self] groupId in
-            if let strongSelf = self {
-                if let navigationController = strongSelf.navigationController as? NavigationController {
-                    let chatListController = ChatListControllerImpl(context: strongSelf.context, groupId: groupId, controlsHistoryPreload: false, enableDebugActions: false)
-                    chatListController.navigationPresentation = .master
-                    navigationController.pushViewController(chatListController)
-                    strongSelf.chatListDisplayNode.chatListNode.clearHighlightAnimated(true)
-                }
-            }
+            self?.onGroupSelected(groupId: groupId)
         }
         
         self.chatListDisplayNode.chatListNode.updatePeerGrouping = { [weak self] peerId, group in
@@ -760,6 +764,28 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
         self.ready.set(self.chatListDisplayNode.chatListNode.ready)
         
         self.displayNodeDidLoad()
+    }
+    
+    private func onGroupSelected(groupId: PeerGroupId) {
+        if let navigationController = navigationController as? NavigationController {
+            navigationController.popToRoot(animated: false)
+            guard groupId != .root else { return }
+            let signal = combineLatest(Circles.getSettings(postbox: context.account.postbox),
+                Circles.updateSettings(postbox: self.context.account.postbox) { (entry) -> Circles in
+                entry.currentCircle = groupId
+                return entry
+            }) |> deliverOnMainQueue |> map { (circles, _) in
+                let chatListController = ChatListControllerImpl(context: self.context, groupId: groupId, controlsHistoryPreload: true, enableDebugActions: false, circlesSettings: circles)
+                chatListController.navigationPresentation = .master
+                if groupId != Namespaces.PeerGroup.archive {
+                    chatListController.navigationPresentation = .standaloneModal
+                }
+                navigationController.pushViewController(chatListController)
+                self.chatListDisplayNode.chatListNode.clearHighlightAnimated(true)
+            }
+            _ = signal.start()
+            
+        }
     }
     
     override public func viewDidAppear(_ animated: Bool) {
