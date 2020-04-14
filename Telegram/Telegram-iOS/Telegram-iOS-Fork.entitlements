@@ -13,12 +13,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.circlescollective.telefrost</string>
-	</array>
-	<key>com.apple.developer.icloud-services</key>
-	<array>
-		<string>CloudDocuments</string>
-		<string>CloudKit</string>
+		<string>group.fork.telegram.Fork</string>
 	</array>
 </dict>
 </plist>
