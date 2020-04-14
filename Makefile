@@ -1,5 +1,51 @@
 .PHONY : check_env build build_arm64 build_debug_arm64 package package_arm64 app app_arm64 app_debug_arm64 build_buckdebug build_verbose kill_xcode clean project project_buckdebug temp
 
+export BUCK=buck
+export TELEGRAM_ENV_SET=1
+
+export DEVELOPMENT_CODE_SIGN_IDENTITY=iPhone Distribution: Circles Collective Inc (WDEGJM2L33)
+export DISTRIBUTION_CODE_SIGN_IDENTITY=iPhone Distribution: Circles Collective Inc (WDEGJM2L33)
+export DEVELOPMENT_TEAM=WDEGJM2L33
+
+export API_ID=1159631
+export API_HASH=2859aa901c976e00213dbe4d5df7f920
+
+export BUNDLE_ID=com.circlescollective.telefrost
+export APP_CENTER_ID=
+export IS_INTERNAL_BUILD=false
+export IS_APPSTORE_BUILD=true
+export APPSTORE_ID=1506986482
+export APP_SPECIFIC_URL_SCHEME=tgfork
+export BUILD_NUMBER=16618
+
+export ENTITLEMENTS_APP=Telegram-iOS/Telegram-iOS-Fork.entitlements
+export DEVELOPMENT_PROVISIONING_PROFILE_APP=Prod Telefrost Main
+export DISTRIBUTION_PROVISIONING_PROFILE_APP=Prod Telefrost Main
+export ENTITLEMENTS_EXTENSION_SHARE=Share/Share-Fork.entitlements
+export DEVELOPMENT_PROVISIONING_PROFILE_EXTENSION_SHARE=Prod Telefrost Share
+export DISTRIBUTION_PROVISIONING_PROFILE_EXTENSION_SHARE=Prod Telefrost Share
+export ENTITLEMENTS_EXTENSION_WIDGET=Widget/Widget-Fork.entitlements
+export DEVELOPMENT_PROVISIONING_PROFILE_EXTENSION_WIDGET=Prod Telefrost Widget
+export DISTRIBUTION_PROVISIONING_PROFILE_EXTENSION_WIDGET=Prod Telefrost Widget
+export ENTITLEMENTS_EXTENSION_NOTIFICATIONSERVICE=NotificationService/NotificationService-Fork.entitlements
+export DEVELOPMENT_PROVISIONING_PROFILE_EXTENSION_NOTIFICATIONSERVICE=Prod Telefrost NotificationService
+export DISTRIBUTION_PROVISIONING_PROFILE_EXTENSION_NOTIFICATIONSERVICE=Prod Telefrost NotificationService
+export ENTITLEMENTS_EXTENSION_NOTIFICATIONCONTENT=NotificationContent/NotificationContent-Fork.entitlements
+export DEVELOPMENT_PROVISIONING_PROFILE_EXTENSION_NOTIFICATIONCONTENT=Prod Telefrost NotificationContent
+export DISTRIBUTION_PROVISIONING_PROFILE_EXTENSION_NOTIFICATIONCONTENT=Prod Telefrost NotificationContent
+export ENTITLEMENTS_EXTENSION_INTENTS=SiriIntents/SiriIntents-Fork.entitlements
+export DEVELOPMENT_PROVISIONING_PROFILE_EXTENSION_INTENTS=Prod Telefrost SiriIntents
+export DISTRIBUTION_PROVISIONING_PROFILE_EXTENSION_INTENTS=Prod Telefrost SiriIntents
+export DEVELOPMENT_PROVISIONING_PROFILE_WATCH_APP=Prod Telefrost watchkitapp
+export DISTRIBUTION_PROVISIONING_PROFILE_WATCH_APP=Prod Telefrost watchkitapp
+export DEVELOPMENT_PROVISIONING_PROFILE_WATCH_EXTENSION=Prod Telefrost watchkitextension
+export DISTRIBUTION_PROVISIONING_PROFILE_WATCH_EXTENSION=Prod Telefrost watchkitextension
+
+BUILDBOX_DIR=buildbox
+
+export CODESIGNING_PROFILES_VARIANT=appstore
+export PACKAGE_METHOD=appstore
+
 include Utils.makefile
 
 BUCK_OPTIONS=\

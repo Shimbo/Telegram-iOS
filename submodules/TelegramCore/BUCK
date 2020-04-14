@@ -5,6 +5,7 @@ framework(
     srcs = glob([
         "Sources/*.swift",
         "Sources/*.m",
+        "TelegramCore/*.swift",
     ]),
     headers = [
         "Sources/Crypto.h",
@@ -29,4 +30,3 @@ framework(
         "$SDKROOT/System/Library/Frameworks/Foundation.framework",
     ],
 )
-
