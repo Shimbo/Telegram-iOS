@@ -1665,7 +1665,7 @@ public func groupInfoController(context: AccountContext, peerId originalPeerId: 
                         }
                     }))
                 } else {
-                    contactsController = context.sharedContext.makeContactMultiselectionController(ContactMultiselectionControllerParams(context: context, mode: .peerSelection(searchChatList: false, searchGroups: false), options: options, filters: [.excludeSelf, .disable(recentIds)]))
+                    contactsController = context.sharedContext.makeContactMultiselectionController(ContactMultiselectionControllerParams(context: context, mode: .peerSelection(searchChatList: false, searchGroups: false, searchChannels: false), options: options, filters: [.excludeSelf, .disable(recentIds)]))
                 }
                 
                 confirmationImpl = { [weak contactsController] peerId in
@@ -1913,7 +1913,12 @@ public func groupInfoController(context: AccountContext, peerId originalPeerId: 
                 }
                 if let contactsController = contactsController as? ContactMultiselectionController {
                     selectAddMemberDisposable.set((contactsController.result
-                    |> deliverOnMainQueue).start(next: { [weak contactsController] peers in
+                    |> deliverOnMainQueue).start(next: { [weak contactsController] result in
+                        var peers: [ContactListPeerId] = []
+                        if case let .result(peerIdsValue, _) = result {
+                            peers = peerIdsValue
+                        }
+                        
                         contactsController?.displayProgress = true
                         addMemberDisposable.set((addMembers(peers)
                         |> deliverOnMainQueue).start(error: { error in
