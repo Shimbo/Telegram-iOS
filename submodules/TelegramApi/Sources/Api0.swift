@@ -625,7 +625,6 @@ fileprivate let parsers: [Int32 : (BufferReader) -> Any?] = {
     dict[1421174295] = { return Api.WebPageAttribute.parse_webPageAttributeTheme($0) }
     dict[82699215] = { return Api.messages.FeaturedStickers.parse_featuredStickersNotModified($0) }
     dict[-123893531] = { return Api.messages.FeaturedStickers.parse_featuredStickers($0) }
-    dict[1375940666] = { return Api.auth.LoginTokenInfo.parse_loginTokenInfo($0) }
     dict[-2048646399] = { return Api.PhoneCallDiscardReason.parse_phoneCallDiscardReasonMissed($0) }
     dict[-527056480] = { return Api.PhoneCallDiscardReason.parse_phoneCallDiscardReasonDisconnect($0) }
     dict[1471006352] = { return Api.PhoneCallDiscardReason.parse_phoneCallDiscardReasonHangup($0) }
@@ -1310,8 +1309,6 @@ public struct Api {
             case let _1 as Api.WebPageAttribute:
                 _1.serialize(buffer, boxed)
             case let _1 as Api.messages.FeaturedStickers:
-                _1.serialize(buffer, boxed)
-            case let _1 as Api.auth.LoginTokenInfo:
                 _1.serialize(buffer, boxed)
             case let _1 as Api.PhoneCallDiscardReason:
                 _1.serialize(buffer, boxed)

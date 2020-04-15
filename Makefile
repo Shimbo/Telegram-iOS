@@ -100,7 +100,7 @@ endif
 BAZEL_COMMON_FLAGS=\
 	--announce_rc \
 	--features=swift.use_global_module_cache \
-	
+
 BAZEL_DEBUG_FLAGS=\
 	--features=swift.enable_batch_mode \
 	--swiftcopt=-j${CORE_COUNT_MINUS_ONE} \
@@ -472,4 +472,3 @@ bazel_opt_project: bazel_prepare_development_build
 	BAZEL_CACHE_DIR="${BAZEL_CACHE_DIR}" \
 	GENERATE_OPT_PROJECT=1 \
 	build-system/generate-xcode-project.sh Telegram
-

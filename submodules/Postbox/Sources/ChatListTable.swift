@@ -455,45 +455,6 @@ final class ChatListTable: Table {
             upperEntries.removeLast()
         }
         
-//<<<<<<< HEAD
-//        if lowerEntries.count != 0 && lowerEntries.count + upperEntries.count < count {
-//            var additionalLowerEntries: [ChatListIntermediateEntry] = []
-//            let startEntryType: ChatListEntryType
-//            if
-//                groupId != .root,
-//                let first = lowerEntries.first,
-//                case .hole = first
-//            {
-//                lowerEntries.removeFirst()    
-//            }
-//            switch lowerEntries.last! {
-//                case .message:
-//                    startEntryType = .message
-//                case .hole:
-//                    startEntryType = .hole
-//            }
-//            self.valueBox.filteredRange(self.table, start: self.key(groupId: groupId, index: lowerEntries.last!.index, type: startEntryType), end: self.lowerBound(groupId: groupId), values: { key, value in
-//                let entry = readEntry(groupId: groupId, messageHistoryTable: messageHistoryTable, peerChatInterfaceStateTable: peerChatInterfaceStateTable, key: key, value: value)
-//                if let predicate = predicate {
-//                    if predicate(entry) {
-//                        additionalLowerEntries.append(entry)
-//                        return .accept
-//                    } else {
-//                        return .skip
-//                    }
-//                } else {
-//                    additionalLowerEntries.append(entry)
-//                    return .accept
-//                }
-//            }, limit: count - lowerEntries.count - upperEntries.count + 1)
-//            if additionalLowerEntries.count >= count - lowerEntries.count + upperEntries.count + 1 {
-//                lower = additionalLowerEntries.last
-//                additionalLowerEntries.removeLast()
-//            }
-//            lowerEntries.append(contentsOf: additionalLowerEntries)
-//        }
-//        
-//=======
         var entries: [ChatListIntermediateEntry] = []
         entries.append(contentsOf: lowerEntries.reversed())
         entries.append(contentsOf: upperEntries)

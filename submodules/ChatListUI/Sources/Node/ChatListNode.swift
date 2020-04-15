@@ -505,7 +505,7 @@ public final class ChatListNode: ListView {
         self.chatListFilterValue.set(.single(chatListFilter))
         self.fillPreloadItems = fillPreloadItems
         self.mode = mode
-        self.circleSettings = circleSettings
+//        self.circleSettings = circleSettings
         
         var isSelecting = false
         if case .peers(_, true, _) = mode {
