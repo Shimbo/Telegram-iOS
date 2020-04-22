@@ -28,12 +28,11 @@ public final class CircleMenuController: ViewController {
     private let workspaceNode: CircleWorkspaceNode
     private let context: AccountContext
     private let presentationData: PresentationData
-    private let groupSelected: ((PeerGroupId) -> Void)?
+    public var groupSelected: ((PeerGroupId) -> Void)?
     
-    init(context: AccountContext, groupSelected: ((PeerGroupId) -> Void)?) {
+    init(context: AccountContext) {
         self.context = context
         self.workspaceNode = CircleWorkspaceNode(context: context)
-        self.groupSelected = groupSelected
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: nil)
         

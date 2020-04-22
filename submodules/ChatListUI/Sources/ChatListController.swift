@@ -145,6 +145,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
     private let tabContainerNode: ChatListFilterTabContainerNode
     private var tabContainerData: ([ChatListFilterTabEntry], Bool)?
     private var circleViewController: CircleMenuController?
+    private var circlesSettings: Circles?
+    private let TitlePersonal = "Personal"
     
     public override func updateNavigationCustomData(_ data: Any?, progress: CGFloat, transition: ContainedViewLayoutTransition) {
         if self.isNodeLoaded {
@@ -178,8 +180,10 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
         if let filter = self.filter {
             title = filter.title
         } else if self.groupId == .root {
-            title = self.presentationData.strings.DialogList_Title
+            title = TitlePersonal
             self.navigationBar?.item = nil
+        } else if let circles = circlesSettings, self.groupId != Namespaces.PeerGroup.archive {
+            title = circles.groupNames[groupId]!
         } else {
             title = self.presentationData.strings.ChatList_ArchivedChatsTitle
         }
@@ -284,7 +288,9 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
                 if let strongSelf = self {
                     let defaultTitle: String
                     if strongSelf.groupId == .root {
-                        defaultTitle = strongSelf.presentationData.strings.DialogList_Title
+                        defaultTitle = strongSelf.TitlePersonal
+                    } else if let circles = strongSelf.circlesSettings, strongSelf.groupId != Namespaces.PeerGroup.archive {
+                        defaultTitle = circles.groupNames[strongSelf.groupId]!
                     } else {
                         defaultTitle = strongSelf.presentationData.strings.ChatList_ArchivedChatsTitle
                     }
@@ -408,9 +414,11 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
         self.titleView.toggleIsLocked = { [weak self] in
             guard let self = self else { return }
             self.context.sharedContext.appLockContext.lock()
-            self.circleViewController = CircleMenuController(context: self.context, groupSelected: { [weak self] (group) in
-//                self?.onGroupSelected(groupId: group)
-            })
+            
+            self.circleViewController = CircleMenuController(context: context)
+            self.circleViewController?.groupSelected = { [weak self] (groupId) in
+                self?.onWorkspaceSelected(groupId)
+            }
             self.present(self.circleViewController!, in: .window(.root))
         }
         
@@ -470,6 +478,25 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
             self.reloadFilters()
         }
     }
+    
+    
+    private func onWorkspaceSelected(_ groupId: PeerGroupId ) {
+        if let navigationController = navigationController as? NavigationController {
+            navigationController.popToRoot(animated: false)
+            guard groupId != .root else { return }
+            let signal = combineLatest(Circles.getSettings(postbox: context.account.postbox),
+                                       Circles.updateSettings(postbox: self.context.account.postbox) { (entry) -> Circles in
+                                        entry.currentCircle = groupId
+                                        return entry
+            }) |> deliverOnMainQueue |> map { (circles, _) in
+                let chatListController = ChatListControllerImpl(context: self.context, groupId: groupId, controlsHistoryPreload: true, enableDebugActions: false)
+                chatListController.circlesSettings = circles
+                chatListController.navigationPresentation = .master
+                navigationController.pushViewController(chatListController)
+            }
+            _ = signal.start()
+        }
+    }
 
     required public init(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -490,7 +517,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController,
     
     private func updateThemeAndStrings() {
         if case .root = self.groupId {
-            self.tabBarItem.title = self.presentationData.strings.DialogList_Title
+            self.tabBarItem.title = TitlePersonal
             let backBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.DialogList_Title, style: .plain, target: nil, action: nil)
             backBarButtonItem.accessibilityLabel = self.presentationData.strings.Common_Back
             self.navigationItem.backBarButtonItem = backBarButtonItem
