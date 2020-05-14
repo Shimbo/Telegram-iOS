@@ -20,9 +20,11 @@ func updatePeerChatInclusionWithMinTimestamp(transaction: Transaction, id: PeerI
                 updatedMinTimestamp = minTimestamp
             }
             var modifiedGroup: PeerGroupId = groupId
-            if let settings = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
-                if let circleId = settings.inclusions[id] {
-                    modifiedGroup = circleId
+            if groupId != PeerGroupId(rawValue: 1) {
+                if let settings = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
+                    if let circleId = settings.inclusions[id] {
+                        modifiedGroup = circleId
+                    }
                 }
             }
             updatedInclusion = .ifHasMessagesOrOneOf(groupId: modifiedGroup, pinningIndex: pinningIndex, minTimestamp: updatedMinTimestamp)

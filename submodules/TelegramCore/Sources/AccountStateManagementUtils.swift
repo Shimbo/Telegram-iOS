@@ -2340,9 +2340,11 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                 }
                 
                 var modifiedGroup: PeerGroupId = groupId
-                if let settings = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
-                    if let circleId = settings.inclusions[peerId] {
-                        modifiedGroup = circleId
+                if groupId != PeerGroupId(rawValue: 1) {
+                    if let settings = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
+                        if let circleId = settings.inclusions[peerId] {
+                            modifiedGroup = circleId
+                        }
                     }
                 }
                 transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: modifiedGroup, pinningIndex: currentPinningIndex, minTimestamp: currentMinTimestamp))
