@@ -357,7 +357,7 @@ final class ChatListIndexTable: Table {
                 let updatedCountFiltered = updatedStateFiltered?.count ?? 0               
                 
                 if prevFilteredUnread != updatedFilteredUnread {
-                    if prevUnread {
+                    if prevFilteredUnread {
                         summary.filtered.chatCount -= 1
                     } else {
                         summary.filtered.chatCount += 1
@@ -409,22 +409,23 @@ final class ChatListIndexTable: Table {
                 }
                 
                 for groupId in groupIds {
+                    let totalGroupId = groupId == PeerGroupId(rawValue: 1) ? groupId : .root
                     var totalGroupUnreadState: ChatListTotalUnreadState
                     var summary: PeerGroupUnreadCountersCombinedSummary
-                    if groupId != PeerGroupId(rawValue: 1) {
-                        if let current = updatedTotalStates[groupId] {
-                            var prev = postbox.messageHistoryMetadataTable.getTotalUnreadState(groupId: groupId)
+                    if totalGroupId != PeerGroupId(rawValue: 1) {
+                        if let current = updatedTotalStates[totalGroupId] {
+                            var prev = postbox.messageHistoryMetadataTable.getTotalUnreadState(groupId: totalGroupId)
                             prev.absoluteCounters.merge(current.absoluteCounters) { (_, new) in new }
                             prev.filteredCounters.merge(current.filteredCounters) { (_, new) in new }
-                            updatedTotalStates[groupId] = prev
+                            updatedTotalStates[totalGroupId] = prev
                         } else {
-                            updatedTotalStates[groupId] = postbox.messageHistoryMetadataTable.getTotalUnreadState(groupId: groupId)
+                            updatedTotalStates[totalGroupId] = postbox.messageHistoryMetadataTable.getTotalUnreadState(groupId: totalGroupId)
                         }
                     }
-                    if let current = updatedTotalStates[groupId] {
+                    if let current = updatedTotalStates[totalGroupId] {
                         totalGroupUnreadState = current
                     } else {
-                        totalGroupUnreadState = postbox.messageHistoryMetadataTable.getTotalUnreadState(groupId: groupId)
+                        totalGroupUnreadState = postbox.messageHistoryMetadataTable.getTotalUnreadState(groupId: totalGroupId)
                     }
                     if let current = updatedTotalUnreadSummaries[groupId] {
                         summary = current
@@ -568,7 +569,7 @@ final class ChatListIndexTable: Table {
                         })
                     }
                     
-                    updatedTotalStates[groupId] = totalGroupUnreadState
+                    updatedTotalStates[totalGroupId] = totalGroupUnreadState
                     
                     var namespaces: [MessageId.Namespace] = []
                     for (namespace, _) in initialStates.states {
@@ -640,7 +641,8 @@ final class ChatListIndexTable: Table {
             let notificationPeerId: PeerId = peer.associatedPeerId ?? peerId
             let notificationSettings = postbox.peerNotificationSettingsTable.getEffective(notificationPeerId)
             let inclusion = self.get(peerId: peerId)
-            if let (groupId, _) = inclusion.includedIndex(peerId: peerId) {
+            if let (peerGroupId, _) = inclusion.includedIndex(peerId: peerId) {
+                let groupId = peerGroupId == PeerGroupId(rawValue: 1) ? peerGroupId : .root
                 if totalStates[groupId] == nil {
                     totalStates[groupId] = ChatListTotalUnreadState(absoluteCounters: [:], filteredCounters: [:])
                 }
