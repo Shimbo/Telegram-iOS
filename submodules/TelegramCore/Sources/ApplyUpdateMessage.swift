@@ -219,6 +219,7 @@ func applyUpdateMessage(postbox: Postbox, stateManager: AccountStateManager, mes
         }
         
         stateManager.addUpdates(result)
+        stateManager.addUpdateGroups([.ensurePeerHasLocalState(id: message.id.peerId)])
     }
 }
 
@@ -307,7 +308,7 @@ func applyUpdateGroupMessages(postbox: Postbox, stateManager: AccountStateManage
                 
                 var storeForwardInfo: StoreMessageForwardInfo?
                 if let forwardInfo = currentMessage.forwardInfo {
-                    storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: forwardInfo.authorSignature)
+                    storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: forwardInfo.authorSignature, psaType: forwardInfo.psaType)
                 }
                 
                 if let fromMedia = currentMessage.media.first, let toMedia = media.first {
@@ -355,5 +356,6 @@ func applyUpdateGroupMessages(postbox: Postbox, stateManager: AccountStateManage
             transaction.addOrMoveToFirstPositionOrderedItemListItem(collectionId: Namespaces.OrderedItemList.CloudRecentGifs, item: OrderedItemListEntry(id: RecentMediaItemId(file.fileId).rawValue, contents: RecentMediaItem(file)), removeTailIfCountExceeds: 200)
         }
         stateManager.addUpdates(result)
+        stateManager.addUpdateGroups([.ensurePeerHasLocalState(id: messages[0].id.peerId)])
     }
 }

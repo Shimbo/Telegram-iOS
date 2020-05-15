@@ -127,6 +127,7 @@ public enum PresentationResourceKey: Int32 {
     case chatInputMediaPanelTrendingIconImage
     case chatInputMediaPanelSettingsIconImage
     case chatInputMediaPanelAddPackButtonImage
+    case chatInputMediaPanelAddedPackButtonImage
     case chatInputMediaPanelGridSetupImage
     case chatInputMediaPanelGridDismissImage
     
@@ -236,4 +237,7 @@ public enum PresentationResourceParameterKey: Hashable {
     
     case chatPrincipalThemeEssentialGraphics(hasWallpaper: Bool, bubbleCorners: PresentationChatBubbleCorners)
     case chatPrincipalThemeAdditionalGraphics(isCustomWallpaper: Bool, bubbleCorners: PresentationChatBubbleCorners)
+    
+    case chatBubbleLamp(incoming: Bool)
+    case chatPsaInfo(color: UInt32)
 }

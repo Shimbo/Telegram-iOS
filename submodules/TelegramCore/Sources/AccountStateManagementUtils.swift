@@ -109,6 +109,12 @@ private func peerIdsRequiringLocalChatStateFromUpdateGroups(_ groups: [UpdateGro
     
     for group in groups {
         peerIds.formUnion(peerIdsRequiringLocalChatStateFromUpdates(group.updates))
+        switch group {
+        case let .ensurePeerHasLocalState(peerId):
+            peerIds.insert(peerId)
+        default:
+            break
+        }
     }
     
     return peerIds
@@ -350,7 +356,7 @@ private func locallyGeneratedMessageTimestampsFromDifference(_ difference: Api.u
 
 private func initialStateWithPeerIds(_ transaction: Transaction, peerIds: Set<PeerId>, activeChannelIds: Set<PeerId>, associatedMessageIds: Set<MessageId>, peerIdsRequiringLocalChatState: Set<PeerId>, locallyGeneratedMessageTimestamps: [PeerId: [(MessageId.Namespace, Int32)]]) -> AccountMutableState {
     var peers: [PeerId: Peer] = [:]
-    var chatStates: [PeerId: PeerChatState] = [:]
+    var channelStates: [PeerId: AccountStateChannelState] = [:]
     
     var channelsToPollExplicitely = Set<PeerId>()
     
@@ -361,11 +367,11 @@ private func initialStateWithPeerIds(_ transaction: Transaction, peerIds: Set<Pe
         
         if peerId.namespace == Namespaces.Peer.CloudChannel {
             if let channelState = transaction.getPeerChatState(peerId) as? ChannelState {
-                chatStates[peerId] = channelState
+                channelStates[peerId] = AccountStateChannelState(pts: channelState.pts)
             }
         } else if peerId.namespace == Namespaces.Peer.CloudUser || peerId.namespace == Namespaces.Peer.CloudGroup {
-            if let chatState = transaction.getPeerChatState(peerId) as? RegularChatState {
-                chatStates[peerId] = chatState
+            if let _ = transaction.getPeerChatState(peerId) as? RegularChatState {
+                //chatStates[peerId] = chatState
             }
         }
     }
@@ -428,7 +434,7 @@ private func initialStateWithPeerIds(_ transaction: Transaction, peerIds: Set<Pe
         }
     }
     
-    return AccountMutableState(initialState: AccountInitialState(state: (transaction.getState() as? AuthorizedAccountState)!.state!, peerIds: peerIds, peerIdsRequiringLocalChatState: peerIdsRequiringLocalChatState, chatStates: chatStates, peerChatInfos: peerChatInfos, locallyGeneratedMessageTimestamps: locallyGeneratedMessageTimestamps, cloudReadStates: cloudReadStates, channelsToPollExplicitely: channelsToPollExplicitely), initialPeers: peers, initialReferencedMessageIds: associatedMessageIds, initialStoredMessages: storedMessages, initialReadInboxMaxIds: readInboxMaxIds, storedMessagesByPeerIdAndTimestamp: storedMessagesByPeerIdAndTimestamp)
+    return AccountMutableState(initialState: AccountInitialState(state: (transaction.getState() as? AuthorizedAccountState)!.state!, peerIds: peerIds, peerIdsRequiringLocalChatState: peerIdsRequiringLocalChatState, channelStates: channelStates, peerChatInfos: peerChatInfos, locallyGeneratedMessageTimestamps: locallyGeneratedMessageTimestamps, cloudReadStates: cloudReadStates, channelsToPollExplicitely: channelsToPollExplicitely), initialPeers: peers, initialReferencedMessageIds: associatedMessageIds, initialStoredMessages: storedMessages, initialReadInboxMaxIds: readInboxMaxIds, storedMessagesByPeerIdAndTimestamp: storedMessagesByPeerIdAndTimestamp)
 }
 
 func initialStateWithUpdateGroups(postbox: Postbox, groups: [UpdateGroup]) -> Signal<AccountMutableState, NoError> {
@@ -766,7 +772,7 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
             case let .updateChannelTooLong(_, channelId, channelPts):
                 let peerId = PeerId(namespace: Namespaces.Peer.CloudChannel, id: channelId)
                 if !channelsToPoll.contains(peerId) {
-                    if let channelPts = channelPts, let channelState = state.chatStates[peerId] as? ChannelState, channelState.pts >= channelPts {
+                    if let channelPts = channelPts, let channelState = state.channelStates[peerId], channelState.pts >= channelPts {
                         Logger.shared.log("State", "channel \(peerId) (\((updatedState.peers[peerId] as? TelegramChannel)?.title ?? "nil")) skip updateChannelTooLong by pts")
                     } else {
                         channelsToPoll.insert(peerId)
@@ -774,12 +780,12 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
                 }
             case let .updateDeleteChannelMessages(channelId, messages, pts: pts, ptsCount):
                 let peerId = PeerId(namespace: Namespaces.Peer.CloudChannel, id: channelId)
-                if let previousState = updatedState.chatStates[peerId] as? ChannelState {
+                if let previousState = updatedState.channelStates[peerId] {
                     if previousState.pts >= pts {
                         Logger.shared.log("State", "channel \(peerId) (\((updatedState.peers[peerId] as? TelegramChannel)?.title ?? "nil")) skip old delete update")
                     } else if previousState.pts + ptsCount == pts {
                         updatedState.deleteMessages(messages.map({ MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: $0) }))
-                        updatedState.updateChannelState(peerId, state: previousState.withUpdatedPts(pts))
+                        updatedState.updateChannelState(peerId, pts: pts)
                     } else {
                         if !channelsToPoll.contains(peerId) {
                             Logger.shared.log("State", "channel \(peerId) (\((updatedState.peers[peerId] as? TelegramChannel)?.title ?? "nil")) delete pts hole")
@@ -796,7 +802,7 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
             case let .updateEditChannelMessage(apiMessage, pts, ptsCount):
                 if let message = StoreMessage(apiMessage: apiMessage), case let .Id(messageId) = message.id {
                     let peerId = messageId.peerId
-                    if let previousState = updatedState.chatStates[peerId] as? ChannelState {
+                    if let previousState = updatedState.channelStates[peerId] {
                         if previousState.pts >= pts {
                             Logger.shared.log("State", "channel \(peerId) (\((updatedState.peers[peerId] as? TelegramChannel)?.title ?? "nil")) skip old edit update")
                         } else if previousState.pts + ptsCount == pts {
@@ -808,7 +814,7 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
                             var attributes = message.attributes
                             attributes.append(ChannelMessageStateVersionAttribute(pts: pts))
                             updatedState.editMessage(messageId, message: message.withUpdatedAttributes(attributes))
-                            updatedState.updateChannelState(peerId, state: previousState.withUpdatedPts(pts))
+                            updatedState.updateChannelState(peerId, pts: pts)
                         } else {
                             if !channelsToPoll.contains(peerId) {
                                 Logger.shared.log("State", "channel \(peerId) (\((updatedState.peers[peerId] as? TelegramChannel)?.title ?? "nil")) edit message pts hole")
@@ -827,7 +833,7 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
                 }
             case let .updateChannelWebPage(channelId, apiWebpage, pts, ptsCount):
                 let peerId = PeerId(namespace: Namespaces.Peer.CloudChannel, id: channelId)
-                if let previousState = updatedState.chatStates[peerId] as? ChannelState {
+                if let previousState = updatedState.channelStates[peerId] {
                     if previousState.pts >= pts {
                     } else if previousState.pts + ptsCount == pts {
                         switch apiWebpage {
@@ -839,7 +845,7 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
                                 }
                         }
                         
-                        updatedState.updateChannelState(peerId, state: previousState.withUpdatedPts(pts))
+                        updatedState.updateChannelState(peerId, pts: pts)
                     } else {
                         if !channelsToPoll.contains(peerId) {
                             Logger.shared.log("State", "channel \(peerId) (\((updatedState.peers[peerId] as? TelegramChannel)?.title ?? "nil")) updateWebPage pts hole")
@@ -874,7 +880,7 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
                 }
             case let .updateNewChannelMessage(apiMessage, pts, ptsCount):
                 if let message = StoreMessage(apiMessage: apiMessage) {
-                    if let previousState = updatedState.chatStates[message.id.peerId] as? ChannelState {
+                    if let previousState = updatedState.channelStates[message.id.peerId] {
                         if previousState.pts >= pts {
                             let messageText: String
                             if Logger.shared.redactSensitiveData {
@@ -892,7 +898,10 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
                             var attributes = message.attributes
                             attributes.append(ChannelMessageStateVersionAttribute(pts: pts))
                             updatedState.addMessages([message.withUpdatedAttributes(attributes)], location: .UpperHistoryBlock)
-                            updatedState.updateChannelState(message.id.peerId, state: previousState.withUpdatedPts(pts))
+                            updatedState.updateChannelState(message.id.peerId, pts: pts)
+                            if case let .Id(id) = message.id {
+                                updatedState.updateChannelSynchronizedUntilMessage(id.peerId, id: id.id)
+                            }
                         } else {
                             if !channelsToPoll.contains(message.id.peerId) {
                                 Logger.shared.log("State", "channel \(message.id.peerId) (\((updatedState.peers[message.id.peerId] as? TelegramChannel)?.title ?? "nil")) message pts hole")
@@ -1320,6 +1329,12 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
                 }
             case let .updateMessageID(id, randomId):
                 updatedState.updatedOutgoingUniqueMessageIds[randomId] = id
+            case .updateDialogFilters:
+                updatedState.addSyncChatListFilters()
+            case let .updateDialogFilterOrder(order):
+                updatedState.addUpdateChatListFilterOrder(order: order)
+            case let .updateDialogFilter(_, id, filter):
+                updatedState.addUpdateChatListFilter(id: id, filter: filter)
             default:
                 break
         }
@@ -1482,7 +1497,7 @@ private func resolveMissingPeerChatInfos(network: Network, state: AccountMutable
             
             var updatedState = state
             switch result {
-                case let .peerDialogs(dialogs, messages, chats, users, state):
+                case let .peerDialogs(dialogs, messages, chats, users, _):
                     updatedState.mergeChats(chats)
                     updatedState.mergeUsers(users)
                     
@@ -1490,7 +1505,7 @@ private func resolveMissingPeerChatInfos(network: Network, state: AccountMutable
                     
                     for dialog in dialogs {
                         switch dialog {
-                            case let .dialog(_, peer, topMessage, readInboxMaxId, readOutboxMaxId, unreadCount, unreadMentionsCount, notifySettings, pts, draft, folderId):
+                            case let .dialog(_, peer, topMessage, readInboxMaxId, readOutboxMaxId, unreadCount, unreadMentionsCount, notifySettings, pts, _, folderId):
                                 let peerId = peer.peerId
                                 
                                 updatedState.setNeedsHoleFromPreviousState(peerId: peerId, namespace: Namespaces.Message.Cloud)
@@ -1538,7 +1553,7 @@ private func resolveMissingPeerChatInfos(network: Network, state: AccountMutable
                                 updatedState.resetMessageTagSummary(peer.peerId, namespace: Namespaces.Message.Cloud, count: unreadMentionsCount, range: MessageHistoryTagNamespaceCountValidityRange(maxId: topMessage))
                                 updatedState.peerChatInfos[peer.peerId] = PeerChatInfo(notificationSettings: notificationSettings)
                                 if let pts = pts {
-                                    channelStates[peer.peerId] = ChannelState(pts: pts, invalidatedPts: pts)
+                                    channelStates[peer.peerId] = ChannelState(pts: pts, invalidatedPts: pts, synchronizedUntilMessageId: nil)
                                 }
                             case .dialogFolder:
                                 assertionFailure()
@@ -1575,9 +1590,9 @@ private func resolveMissingPeerChatInfos(network: Network, state: AccountMutable
 func keepPollingChannel(postbox: Postbox, network: Network, peerId: PeerId, stateManager: AccountStateManager) -> Signal<Void, NoError> {
     return postbox.transaction { transaction -> Signal<Void, NoError> in
         if let accountState = (transaction.getState() as? AuthorizedAccountState)?.state, let peer = transaction.getPeer(peerId) {
-            var chatStates: [PeerId: PeerChatState] = [:]
+            var channelStates: [PeerId: AccountStateChannelState] = [:]
             if let channelState = transaction.getPeerChatState(peerId) as? ChannelState {
-                chatStates[peerId] = channelState
+                channelStates[peerId] = AccountStateChannelState(pts: channelState.pts)
             }
             let initialPeers: [PeerId: Peer] = [peerId: peer]
             var peerChatInfos: [PeerId: PeerChatInfo] = [:]
@@ -1594,7 +1609,7 @@ func keepPollingChannel(postbox: Postbox, network: Network, peerId: PeerId, stat
                     peerChatInfos[peerId] = PeerChatInfo(notificationSettings: notificationSettings)
                 }
             }
-            let initialState = AccountMutableState(initialState: AccountInitialState(state: accountState, peerIds: Set(), peerIdsRequiringLocalChatState: Set(), chatStates: chatStates, peerChatInfos: peerChatInfos, locallyGeneratedMessageTimestamps: [:], cloudReadStates: [:], channelsToPollExplicitely: Set()), initialPeers: initialPeers, initialReferencedMessageIds: Set(), initialStoredMessages: Set(), initialReadInboxMaxIds: [:], storedMessagesByPeerIdAndTimestamp: [:])
+            let initialState = AccountMutableState(initialState: AccountInitialState(state: accountState, peerIds: Set(), peerIdsRequiringLocalChatState: Set(), channelStates: channelStates, peerChatInfos: peerChatInfos, locallyGeneratedMessageTimestamps: [:], cloudReadStates: [:], channelsToPollExplicitely: Set()), initialPeers: initialPeers, initialReferencedMessageIds: Set(), initialStoredMessages: Set(), initialReadInboxMaxIds: [:], storedMessagesByPeerIdAndTimestamp: [:])
             return pollChannel(network: network, peer: peer, state: initialState)
             |> mapToSignal { (finalState, _, timeout) -> Signal<Void, NoError> in
                 return resolveAssociatedMessages(network: network, state: finalState)
@@ -1645,7 +1660,9 @@ private func resetChannels(network: Network, peers: [Peer], state: AccountMutabl
         var storeMessages: [StoreMessage] = []
         var readStates: [PeerId: [MessageId.Namespace: PeerReadState]] = [:]
         var mentionTagSummaries: [PeerId: MessageHistoryTagNamespaceSummary] = [:]
-        var channelStates: [PeerId: ChannelState] = [:]
+        var channelStates: [PeerId: AccountStateChannelState] = [:]
+        var invalidateChannelStates: [PeerId: Int32] = [:]
+        var channelSynchronizedUntilMessage: [PeerId: MessageId.Id] = [:]
         var notificationSettings: [PeerId: PeerNotificationSettings] = [:]
         
         if let result = result {
@@ -1702,7 +1719,8 @@ private func resetChannels(network: Network, peers: [Peer], state: AccountMutabl
                         }
                         
                         if let apiChannelPts = apiChannelPts {
-                            channelStates[peerId] = ChannelState(pts: apiChannelPts, invalidatedPts: apiChannelPts)
+                            channelStates[peerId] = AccountStateChannelState(pts: apiChannelPts)
+                            invalidateChannelStates[peerId] = apiChannelPts
                         }
                         
                         notificationSettings[peerId] = TelegramPeerNotificationSettings(apiSettings: apiNotificationSettings)
@@ -1732,6 +1750,7 @@ private func resetChannels(network: Network, peers: [Peer], state: AccountMutabl
         for message in storeMessages {
             if case let .Id(id) = message.id, id.namespace == Namespaces.Message.Cloud {
                 updatedState.setNeedsHoleFromPreviousState(peerId: id.peerId, namespace: id.namespace)
+                channelSynchronizedUntilMessage[id.peerId] = id.id
             }
         }
         
@@ -1754,7 +1773,13 @@ private func resetChannels(network: Network, peers: [Peer], state: AccountMutabl
         }
         
         for (peerId, channelState) in channelStates {
-            updatedState.updateChannelState(peerId, state: channelState)
+            updatedState.updateChannelState(peerId, pts: channelState.pts)
+        }
+        for (peerId, pts) in invalidateChannelStates {
+            updatedState.updateChannelInvalidationPts(peerId, invalidationPts: pts)
+        }
+        for (peerId, id) in channelSynchronizedUntilMessage {
+            updatedState.updateChannelSynchronizedUntilMessage(peerId, id: id)
         }
         
         for (peerId, settings) in notificationSettings {
@@ -1780,7 +1805,7 @@ private func pollChannel(network: Network, peer: Peer, state: AccountMutableStat
         #endif
         
         let pollPts: Int32
-        if let channelState = state.chatStates[peer.id] as? ChannelState {
+        if let channelState = state.channelStates[peer.id] {
             pollPts = channelState.pts
         } else {
             pollPts = 1
@@ -1802,13 +1827,13 @@ private func pollChannel(network: Network, peer: Peer, state: AccountMutableStat
                 switch difference {
                     case let .channelDifference(_, pts, timeout, newMessages, otherUpdates, chats, users):
                         apiTimeout = timeout
-                        let channelState: ChannelState
-                        if let previousState = updatedState.chatStates[peer.id] as? ChannelState {
-                            channelState = previousState.withUpdatedPts(pts)
+                        let channelPts: Int32
+                        if let _ = updatedState.channelStates[peer.id] {
+                            channelPts = pts
                         } else {
-                            channelState = ChannelState(pts: pts, invalidatedPts: nil)
+                            channelPts = pts
                         }
-                        updatedState.updateChannelState(peer.id, state: channelState)
+                        updatedState.updateChannelState(peer.id, pts: channelPts)
                         
                         updatedState.mergeChats(chats)
                         updatedState.mergeUsers(users)
@@ -1821,6 +1846,9 @@ private func pollChannel(network: Network, peer: Peer, state: AccountMutableStat
                                     }
                                 }
                                 updatedState.addMessages([message], location: .UpperHistoryBlock)
+                                if case let .Id(id) = message.id {
+                                    updatedState.updateChannelSynchronizedUntilMessage(id.peerId, id: id.id)
+                                }
                             }
                         }
                         for update in otherUpdates {
@@ -1883,13 +1911,13 @@ private func pollChannel(network: Network, peer: Peer, state: AccountMutableStat
                     case let .channelDifferenceEmpty(_, pts, timeout):
                         apiTimeout = timeout
                         
-                        let channelState: ChannelState
-                        if let previousState = updatedState.chatStates[peer.id] as? ChannelState {
-                            channelState = previousState.withUpdatedPts(pts)
+                        let channelPts: Int32
+                        if let previousState = updatedState.channelStates[peer.id] {
+                            channelPts = pts
                         } else {
-                            channelState = ChannelState(pts: pts, invalidatedPts: nil)
+                            channelPts = pts
                         }
-                        updatedState.updateChannelState(peer.id, state: channelState)
+                        updatedState.updateChannelState(peer.id, pts: channelPts)
                     case let .channelDifferenceTooLong(_, timeout, dialog, messages, chats, users):
                         apiTimeout = timeout
                         
@@ -1905,8 +1933,8 @@ private func pollChannel(network: Network, peer: Peer, state: AccountMutableStat
                         }
                         
                         if let (peer, pts, topMessage, readInboxMaxId, readOutboxMaxId, unreadCount, unreadMentionsCount) = parameters {
-                            let channelState = ChannelState(pts: pts, invalidatedPts: pts)
-                            updatedState.updateChannelState(peer.peerId, state: channelState)
+                            updatedState.updateChannelState(peer.peerId, pts: pts)
+                            updatedState.updateChannelInvalidationPts(peer.peerId, invalidationPts: pts)
                             
                             updatedState.mergeChats(chats)
                             updatedState.mergeUsers(users)
@@ -1924,6 +1952,7 @@ private func pollChannel(network: Network, peer: Peer, state: AccountMutableStat
                                     let location: AddMessagesLocation
                                     if case let .Id(id) = message.id, id.id == topMessage {
                                         location = .UpperHistoryBlock
+                                        updatedState.updateChannelSynchronizedUntilMessage(id.peerId, id: id.id)
                                     } else {
                                         location = .Random
                                     }
@@ -1995,9 +2024,9 @@ private func verifyTransaction(_ transaction: Transaction, finalState: AccountMu
     for peerId in channelsWithUpdatedStates {
         let currentState = transaction.getPeerChatState(peerId)
         var previousStateMatches = false
-        let previousState = finalState.initialState.chatStates[peerId] as? ChannelState
-        if let currentState = currentState, let previousState = previousState {
-            if currentState.equals(previousState) {
+        let previousState = finalState.initialState.channelStates[peerId]
+        if let currentState = currentState as? ChannelState, let previousState = previousState {
+            if currentState.pts == previousState.pts {
                 previousStateMatches = true
             }
         } else if currentState == nil && previousState == nil {
@@ -2036,13 +2065,15 @@ private func optimizedOperations(_ operations: [AccountStateMutationOperation]) 
     var result: [AccountStateMutationOperation] = []
     
     var updatedState: AuthorizedAccountState.State?
-    var updatedChannelStates: [PeerId: ChannelState] = [:]
+    var updatedChannelStates: [PeerId: AccountStateChannelState] = [:]
+    var invalidateChannelPts: [PeerId: Int32] = [:]
+    var updateChannelSynchronizedUntilMessage: [PeerId: MessageId.Id] = [:]
     
     var currentAddMessages: OptimizeAddMessagesState?
     var currentAddScheduledMessages: OptimizeAddMessagesState?
     for operation in operations {
         switch operation {
-            case .DeleteMessages, .DeleteMessagesWithGlobalIds, .EditMessage, .UpdateMessagePoll/*, .UpdateMessageReactions*/, .UpdateMedia, .MergeApiChats, .MergeApiUsers, .MergePeerPresences, .UpdatePeer, .ReadInbox, .ReadOutbox, .ReadGroupFeedInbox, .ResetReadState, .ResetIncomingReadState, .UpdatePeerChatUnreadMark, .ResetMessageTagSummary, .UpdateNotificationSettings, .UpdateGlobalNotificationSettings, .UpdateSecretChat, .AddSecretMessages, .ReadSecretOutbox, .AddPeerInputActivity, .UpdateCachedPeerData, .UpdatePinnedItemIds, .ReadMessageContents, .UpdateMessageImpressionCount, .UpdateInstalledStickerPacks, .UpdateRecentGifs, .UpdateChatInputState, .UpdateCall, .UpdateLangPack, .UpdateMinAvailableMessage, .UpdateIsContact, .UpdatePeerChatInclusion, .UpdatePeersNearby, .UpdateTheme:
+            case .DeleteMessages, .DeleteMessagesWithGlobalIds, .EditMessage, .UpdateMessagePoll/*, .UpdateMessageReactions*/, .UpdateMedia, .MergeApiChats, .MergeApiUsers, .MergePeerPresences, .UpdatePeer, .ReadInbox, .ReadOutbox, .ReadGroupFeedInbox, .ResetReadState, .ResetIncomingReadState, .UpdatePeerChatUnreadMark, .ResetMessageTagSummary, .UpdateNotificationSettings, .UpdateGlobalNotificationSettings, .UpdateSecretChat, .AddSecretMessages, .ReadSecretOutbox, .AddPeerInputActivity, .UpdateCachedPeerData, .UpdatePinnedItemIds, .ReadMessageContents, .UpdateMessageImpressionCount, .UpdateInstalledStickerPacks, .UpdateRecentGifs, .UpdateChatInputState, .UpdateCall, .UpdateLangPack, .UpdateMinAvailableMessage, .UpdateIsContact, .UpdatePeerChatInclusion, .UpdatePeersNearby, .UpdateTheme, .SyncChatListFilters, .UpdateChatListFilter, .UpdateChatListFilterOrder:
                 if let currentAddMessages = currentAddMessages, !currentAddMessages.messages.isEmpty {
                     result.append(.AddMessages(currentAddMessages.messages, currentAddMessages.location))
                 }
@@ -2053,8 +2084,12 @@ private func optimizedOperations(_ operations: [AccountStateMutationOperation]) 
                 result.append(operation)
             case let .UpdateState(state):
                 updatedState = state
-            case let .UpdateChannelState(peerId, state):
-                updatedChannelStates[peerId] = state
+            case let .UpdateChannelState(peerId, pts):
+                updatedChannelStates[peerId] = AccountStateChannelState(pts: pts)
+            case let .UpdateChannelInvalidationPts(peerId, pts):
+                invalidateChannelPts[peerId] = pts
+            case let .UpdateChannelSynchronizedUntilMessage(peerId, id):
+                updateChannelSynchronizedUntilMessage[peerId] = id
             case let .AddMessages(messages, location):
                 if let currentAddMessages = currentAddMessages, currentAddMessages.location == location {
                     currentAddMessages.messages.append(contentsOf: messages)
@@ -2085,7 +2120,15 @@ private func optimizedOperations(_ operations: [AccountStateMutationOperation]) 
     }
     
     for (peerId, state) in updatedChannelStates {
-        result.append(.UpdateChannelState(peerId, state))
+        result.append(.UpdateChannelState(peerId, state.pts))
+    }
+    
+    for (peerId, pts) in invalidateChannelPts {
+        result.append(.UpdateChannelInvalidationPts(peerId, pts))
+    }
+    
+    for (peerId, id) in updateChannelSynchronizedUntilMessage {
+        result.append(.UpdateChannelSynchronizedUntilMessage(peerId, id))
     }
     
     return result
@@ -2126,13 +2169,24 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
     var updatedThemes: [Int64: TelegramTheme] = [:]
     var delayNotificatonsUntil: Int32?
     var peerActivityTimestamps: [PeerId: Int32] = [:]
+    var syncChatListFilters = false
     
     var holesFromPreviousStateMessageIds: [MessageId] = []
     
     for (peerId, namespaces) in finalState.state.namespacesWithHolesFromPreviousState {
         for namespace in namespaces {
-            if let id = transaction.getTopPeerMessageId(peerId: peerId, namespace: namespace) {
-                holesFromPreviousStateMessageIds.append(MessageId(peerId: id.peerId, namespace: id.namespace, id: id.id + 1))
+            var topId: Int32?
+            if namespace == Namespaces.Message.Cloud, let channelState = transaction.getPeerChatState(peerId) as? ChannelState {
+                if let synchronizedUntilMessageId = channelState.synchronizedUntilMessageId {
+                    topId = synchronizedUntilMessageId
+                }
+            }
+            if topId == nil {
+                topId = transaction.getTopPeerMessageId(peerId: peerId, namespace: namespace)?.id
+            }
+            
+            if let id = topId {
+                holesFromPreviousStateMessageIds.append(MessageId(peerId: peerId, namespace: namespace, id: id + 1))
             } else {
                 holesFromPreviousStateMessageIds.append(MessageId(peerId: peerId, namespace: namespace, id: 1))
             }
@@ -2356,7 +2410,7 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                     }
                     if let apiPoll = apiPoll {
                         switch apiPoll {
-                        case let .poll(id, flags, question, answers):
+                        case let .poll(id, flags, question, answers, closePeriod, _):
                             let publicity: TelegramMediaPollPublicity
                             if (flags & (1 << 1)) != 0 {
                                 publicity = .public
@@ -2369,7 +2423,7 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                             } else {
                                 kind = .poll(multipleAnswers: (flags & (1 << 2)) != 0)
                             }
-                            updatedPoll = TelegramMediaPoll(pollId: MediaId(namespace: Namespaces.Media.CloudPoll, id: id), publicity: publicity, kind: kind, text: question, options: answers.map(TelegramMediaPollOption.init(apiOption:)), correctAnswers: nil, results: poll.results, isClosed: (flags & (1 << 0)) != 0)
+                            updatedPoll = TelegramMediaPoll(pollId: MediaId(namespace: Namespaces.Media.CloudPoll, id: id), publicity: publicity, kind: kind, text: question, options: answers.map(TelegramMediaPollOption.init(apiOption:)), correctAnswers: nil, results: poll.results, isClosed: (flags & (1 << 0)) != 0, deadlineTimeout: closePeriod)
                         }
                     }
                     updatedPoll = updatedPoll.withUpdatedResults(TelegramMediaPollResults(apiResults: results), min: resultsMin)
@@ -2379,7 +2433,7 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                 transaction.updateMessage(messageId, update: { currentMessage in
                     var storeForwardInfo: StoreMessageForwardInfo?
                     if let forwardInfo = currentMessage.forwardInfo {
-                        storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: forwardInfo.authorSignature)
+                        storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: forwardInfo.authorSignature, psaType: forwardInfo.psaType)
                     }
                     var attributes = currentMessage.attributes
                     var found = false
@@ -2422,7 +2476,33 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                         }
                     }
                 }
-                transaction.resetIncomingReadStates([peerId: [namespace: .idBased(maxIncomingReadId: maxIncomingReadId, maxOutgoingReadId: maxOutgoingReadId, maxKnownId: maxKnownId, count: count, markedUnread: markedUnreadValue)]])
+                
+                var ignore = false
+                if let currentReadState = transaction.getCombinedPeerReadState(peerId) {
+                    loop: for (currentNamespace, currentState) in currentReadState.states {
+                        if namespace == currentNamespace {
+                            switch currentState {
+                            case let .idBased(localMaxIncomingReadId, _, _, localCount, localMarkedUnread):
+                                if count != 0 || markedUnreadValue {
+                                    if localMaxIncomingReadId > maxIncomingReadId {
+                                        transaction.setNeedsIncomingReadStateSynchronization(peerId)
+                                        
+                                        transaction.resetIncomingReadStates([peerId: [namespace: .idBased(maxIncomingReadId: localMaxIncomingReadId, maxOutgoingReadId: maxOutgoingReadId, maxKnownId: maxKnownId, count: localCount, markedUnread: localMarkedUnread)]])
+                                        
+                                        Logger.shared.log("State", "not applying incoming read state for \(peerId): \(localMaxIncomingReadId) > \(maxIncomingReadId)")
+                                        ignore = true
+                                    }
+                                }
+                            default:
+                                break
+                            }
+                            break loop
+                        }
+                    }
+                }
+                if !ignore {
+                    transaction.resetIncomingReadStates([peerId: [namespace: .idBased(maxIncomingReadId: maxIncomingReadId, maxOutgoingReadId: maxOutgoingReadId, maxKnownId: maxKnownId, count: count, markedUnread: markedUnreadValue)]])
+                }
             case let .ResetIncomingReadState(groupId, peerId, namespace, maxIncomingReadId, count, pts):
                 var ptsMatchesState = false
                 if peerId.namespace == Namespaces.Peer.CloudUser || peerId.namespace == Namespaces.Peer.CloudGroup {
@@ -2481,9 +2561,21 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                 let currentState = transaction.getState() as! AuthorizedAccountState
                 transaction.setState(currentState.changedState(state))
                 Logger.shared.log("State", "apply state \(state)")
-            case let .UpdateChannelState(peerId, channelState):
-                transaction.setPeerChatState(peerId, state: channelState)
-                Logger.shared.log("State", "apply channel state \(peerId): \(channelState)")
+            case let .UpdateChannelState(peerId, pts):
+                var state = (transaction.getPeerChatState(peerId) as? ChannelState) ?? ChannelState(pts: pts, invalidatedPts: nil, synchronizedUntilMessageId: nil)
+                state = state.withUpdatedPts(pts)
+                transaction.setPeerChatState(peerId, state: state)
+                Logger.shared.log("State", "apply channel state \(peerId): \(state)")
+            case let .UpdateChannelInvalidationPts(peerId, pts):
+                var state = (transaction.getPeerChatState(peerId) as? ChannelState) ?? ChannelState(pts: 0, invalidatedPts: pts, synchronizedUntilMessageId: nil)
+                state = state.withUpdatedInvalidatedPts(pts)
+                transaction.setPeerChatState(peerId, state: state)
+                Logger.shared.log("State", "apply channel invalidation pts \(peerId): \(state)")
+            case let .UpdateChannelSynchronizedUntilMessage(peerId, id):
+                var state = (transaction.getPeerChatState(peerId) as? ChannelState) ?? ChannelState(pts: 0, invalidatedPts: nil, synchronizedUntilMessageId: id)
+                state = state.withUpdatedSynchronizedUntilMessageId(id)
+                transaction.setPeerChatState(peerId, state: state)
+                Logger.shared.log("State", "apply channel synchronized until message \(peerId): \(state)")
             case let .UpdateNotificationSettings(subject, notificationSettings):
                 switch subject {
                     case let .peer(peerId):
@@ -2647,7 +2739,7 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                 transaction.updateMessage(id, update: { currentMessage in
                     var storeForwardInfo: StoreMessageForwardInfo?
                     if let forwardInfo = currentMessage.forwardInfo {
-                        storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: forwardInfo.authorSignature)
+                        storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: forwardInfo.authorSignature, psaType: forwardInfo.psaType)
                     }
                     var attributes = currentMessage.attributes
                     loop: for j in 0 ..< attributes.count {
@@ -2683,6 +2775,46 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                 updatedPeersNearby = peersNearby
             case let .UpdateTheme(theme):
                 updatedThemes[theme.id] = theme
+            case .SyncChatListFilters:
+                syncChatListFilters = true
+            case let .UpdateChatListFilterOrder(order):
+                if !syncChatListFilters {
+                    let _ = updateChatListFiltersState(transaction: transaction, { state in
+                        var state = state
+                        if Set(state.filters.map { $0.id }) == Set(order) {
+                            var updatedFilters: [ChatListFilter] = []
+                            for id in order {
+                                if let filter = state.filters.first(where: { $0.id == id }) {
+                                    updatedFilters.append(filter)
+                                } else {
+                                    assertionFailure()
+                                }
+                            }
+                            state.filters = updatedFilters
+                            state.remoteFilters = state.filters
+                        } else {
+                            syncChatListFilters = true
+                        }
+                        return state
+                    })
+                }
+            case let .UpdateChatListFilter(id, filter):
+                if !syncChatListFilters {
+                    let _ = updateChatListFiltersState(transaction: transaction, { state in
+                        var state = state
+                        if let index = state.filters.firstIndex(where: { $0.id == id }) {
+                            if let filter = filter {
+                                state.filters[index] = ChatListFilter(apiFilter: filter)
+                            } else {
+                                state.filters.remove(at: index)
+                            }
+                            state.remoteFilters = state.filters
+                        } else {
+                            syncChatListFilters = true
+                        }
+                        return state
+                    })
+                }
         }
     }
     
@@ -2713,8 +2845,8 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                 return false
             }
         }) {
-            addSynchronizeInstalledStickerPacksOperation(transaction: transaction, namespace: .stickers, content: .sync)
-            addSynchronizeInstalledStickerPacksOperation(transaction: transaction, namespace: .masks, content: .sync)
+            addSynchronizeInstalledStickerPacksOperation(transaction: transaction, namespace: .stickers, content: .sync, noDelay: false)
+            addSynchronizeInstalledStickerPacksOperation(transaction: transaction, namespace: .masks, content: .sync, noDelay: false)
         } else {
             var syncStickers = false
             var syncMasks = false
@@ -2818,10 +2950,10 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                 }
             }
             if syncStickers {
-                addSynchronizeInstalledStickerPacksOperation(transaction: transaction, namespace: .stickers, content: .sync)
+                addSynchronizeInstalledStickerPacksOperation(transaction: transaction, namespace: .stickers, content: .sync, noDelay: false)
             }
             if syncMasks {
-                addSynchronizeInstalledStickerPacksOperation(transaction: transaction, namespace: .masks, content: .sync)
+                addSynchronizeInstalledStickerPacksOperation(transaction: transaction, namespace: .masks, content: .sync, noDelay: false)
             }
         }
     }
@@ -2901,7 +3033,9 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                     let currentInclusion = transaction.getPeerChatListInclusion(peerId)
                     if let groupId = currentInclusion.groupId, groupId == Namespaces.PeerGroup.archive {
                         if let peer = transaction.getPeer(peerId) as? TelegramSecretChat {
-                            if let notificationSettings = transaction.getPeerNotificationSettings(peer.regularPeerId) as? TelegramPeerNotificationSettings, !notificationSettings.isRemovedFromTotalUnreadCount {
+                            let isRemovedFromTotalUnreadCount = resolvedIsRemovedFromTotalUnreadCount(globalSettings: transaction.getGlobalNotificationSettings(), peer: peer, peerSettings: transaction.getPeerNotificationSettings(peer.regularPeerId))
+                            
+                            if !isRemovedFromTotalUnreadCount {
                                 transaction.updatePeerChatListInclusion(peerId, inclusion: currentInclusion.withGroupId(groupId: .root))
                             }
                         }
@@ -3001,6 +3135,10 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
             let messageId = MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: messageIdValue)
             deleteMessagesInteractively(transaction: transaction, stateManager: nil, postbox: postbox, messageIds: [messageId], type: .forEveryone, deleteAllInGroup: false, removeIfPossiblyDelivered: false)
         }
+    }
+    
+    if syncChatListFilters {
+        requestChatListFiltersSync(transaction: transaction)
     }
     
     return AccountReplayedFinalState(state: finalState, addedIncomingMessageIds: addedIncomingMessageIds, wasScheduledMessageIds: wasScheduledMessageIds, addedSecretMessageIds: addedSecretMessageIds, updatedTypingActivities: updatedTypingActivities, updatedWebpages: updatedWebpages, updatedCalls: updatedCalls, updatedPeersNearby: updatedPeersNearby, isContactUpdates: isContactUpdates, delayNotificatonsUntil: delayNotificatonsUntil)

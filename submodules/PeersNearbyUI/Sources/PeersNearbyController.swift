@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import AsyncDisplayKit
 import Display
 import SwiftSignalKit
 import Postbox
@@ -324,8 +325,8 @@ private func peersNearbyControllerEntries(data: PeersNearbyData?, state: PeersNe
     entries.append(.visibility(presentationData.theme, visible ? presentationData.strings.PeopleNearby_MakeInvisible : presentationData.strings.PeopleNearby_MakeVisible, visible))
     
     if let data = data, !data.users.isEmpty {
-        var i: Int32 = 0
-        var users = data.users
+        var index: Int32 = 0
+        var users = data.users.filter { $0.peer.0.id != data.accountPeerId }
         var effectiveExpanded = expanded
         if users.count > maxUsersDisplayedLimit && !expanded {
             users = Array(users.prefix(Int(maxUsersDisplayedLimit)))
@@ -334,10 +335,8 @@ private func peersNearbyControllerEntries(data: PeersNearbyData?, state: PeersNe
         }
         
         for user in users {
-            if user.peer.0.id != data.accountPeerId {
-                entries.append(.user(i, presentationData.theme, presentationData.strings, presentationData.dateTimeFormat, presentationData.nameDisplayOrder, user))
-                i += 1
-            }
+            entries.append(.user(index, presentationData.theme, presentationData.strings, presentationData.dateTimeFormat, presentationData.nameDisplayOrder, user))
+            index += 1
         }
         
         if !effectiveExpanded {
@@ -475,14 +474,14 @@ public func peersNearbyController(context: AccountContext) -> ViewController {
                 let _ = (coordinatePromise.get()
                 |> deliverOnMainQueue).start(next: { coordinate in
                     if let coordinate = coordinate {
-                        let _ = peersNearbyUpdateVisibility(account: context.account, update: .visible(latitude: coordinate.latitude, longitude: coordinate.longitude), background: false).start()
+                        let _ = updatePeersNearbyVisibility(account: context.account, update: .visible(latitude: coordinate.latitude, longitude: coordinate.longitude), background: false).start()
                     }
                 })
             })]), nil)
             
             
         } else {
-            let _ = peersNearbyUpdateVisibility(account: context.account, update: .invisible, background: false).start()
+            let _ = updatePeersNearbyVisibility(account: context.account, update: .invisible, background: false).start()
         }
     }, openProfile: { peer in
         navigateToProfileImpl?(peer)
@@ -493,7 +492,7 @@ public func peersNearbyController(context: AccountContext) -> ViewController {
 
         var cancelImpl: (() -> Void)?
         let progressSignal = Signal<Never, NoError> { subscriber in
-            let controller = OverlayStatusController(theme: presentationData.theme,  type: .loading(cancelled: {
+            let controller = OverlayStatusController(theme: presentationData.theme, type: .loading(cancelled: {
                 cancelImpl?()
             }))
             presentControllerImpl?(controller, nil)
@@ -642,11 +641,7 @@ public func peersNearbyController(context: AccountContext) -> ViewController {
     }
     navigateToChatImpl = { [weak controller] peer in
         if let navigationController = controller?.navigationController as? NavigationController {
-            context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer.id), keepStack: .always, purposefulAction: { [weak navigationController] in
-                if let navigationController = navigationController, let chatController = navigationController.viewControllers.last as? ChatController {
-                    replaceAllButRootControllerImpl?(chatController, false)
-                }
-            }))
+            context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer.id), keepStack: .always, purposefulAction: {}))
         }
     }
     pushControllerImpl = { [weak controller] c in

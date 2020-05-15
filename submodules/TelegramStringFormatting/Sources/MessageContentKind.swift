@@ -23,6 +23,7 @@ public enum MessageContentKindKey {
     case expiredVideo
     case poll
     case restricted
+    case dice
 }
 
 public enum MessageContentKind: Equatable {
@@ -42,6 +43,7 @@ public enum MessageContentKind: Equatable {
     case expiredVideo
     case poll(String)
     case restricted(String)
+    case dice(String)
     
     public var key: MessageContentKindKey {
         switch self {
@@ -77,6 +79,8 @@ public enum MessageContentKind: Equatable {
             return .poll
         case .restricted:
             return .restricted
+        case .dice:
+            return .dice
         }
     }
 }
@@ -165,6 +169,8 @@ public func mediaContentKind(_ media: Media, message: Message? = nil, strings: P
         }
     case let poll as TelegramMediaPoll:
         return .poll(poll.text)
+    case let dice as TelegramMediaDice:
+        return .dice(dice.emoji)
     default:
         return nil
     }
@@ -212,6 +218,8 @@ public func stringForMediaKind(_ kind: MessageContentKind, strings: Presentation
         return ("📊 \(text)", false)
     case let .restricted(text):
         return (text, false)
+    case let .dice(emoji):
+        return (emoji, true)
     }
 }
 
@@ -220,4 +228,20 @@ public func descriptionStringForMessage(contentSettings: ContentSettings, messag
         return (message.text, false)
     }
     return stringForMediaKind(messageContentKind(contentSettings: contentSettings, message: message, strings: strings, nameDisplayOrder: nameDisplayOrder, accountPeerId: accountPeerId), strings: strings)
+}
+
+public func foldLineBreaks(_ text: String) -> String {
+    let lines = text.split { $0.isNewline }
+    var result = ""
+    for line in lines {
+        if line.isEmpty {
+            continue
+        }
+        if result.isEmpty {
+            result += line
+        } else {
+            result += " " + line
+        }
+    }
+    return result
 }

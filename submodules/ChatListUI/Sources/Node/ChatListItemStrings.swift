@@ -160,6 +160,8 @@ public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: 
                     }
                 case let poll as TelegramMediaPoll:
                     messageText = "📊 \(poll.text)"
+                case let dice as TelegramMediaDice:
+                    messageText = dice.emoji
                 default:
                     break
             }

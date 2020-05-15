@@ -17,10 +17,10 @@ func archiveContextMenuItems(context: AccountContext, groupId: PeerGroupId, chat
     return context.account.postbox.transaction { [weak chatListController] transaction -> [ContextMenuItem] in
         var items: [ContextMenuItem] = []
         
-        if !transaction.getUnreadChatListPeerIds(groupId: groupId).isEmpty {
-            items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_MarkAllAsRead, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/MarkAsRead"), color: theme.contextMenu.primaryColor) }, action: { [weak chatListController] _, f in
+        if !transaction.getUnreadChatListPeerIds(groupId: groupId, filterPredicate: nil).isEmpty {
+            items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_MarkAllAsRead, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/MarkAsRead"), color: theme.contextMenu.primaryColor) }, action: { _, f in
                 let _ = (context.account.postbox.transaction { transaction in
-                    markAllChatsAsReadInteractively(transaction: transaction, viewTracker: context.account.viewTracker, groupId: groupId)
+                    markAllChatsAsReadInteractively(transaction: transaction, viewTracker: context.account.viewTracker, groupId: groupId, filterPredicate: nil)
                 }
                 |> deliverOnMainQueue).start(completed: {
                     f(.default)
@@ -40,13 +40,17 @@ func archiveContextMenuItems(context: AccountContext, groupId: PeerGroupId, chat
 }
 
 enum ChatContextMenuSource {
-    case chatList
+    case chatList(filter: ChatListFilter?)
     case search(ChatListSearchContextActionSource)
 }
 
-func chatContextMenuItems(context: AccountContext, peerId: PeerId, source: ChatContextMenuSource, chatListController: ChatListControllerImpl?) -> Signal<[ContextMenuItem], NoError> {
+func chatContextMenuItems(context: AccountContext, peerId: PeerId, promoInfo: ChatListNodeEntryPromoInfo?, source: ChatContextMenuSource, chatListController: ChatListControllerImpl?) -> Signal<[ContextMenuItem], NoError> {
     let strings = context.sharedContext.currentPresentationData.with({ $0 }).strings
     return context.account.postbox.transaction { [weak chatListController] transaction -> [ContextMenuItem] in
+        if promoInfo != nil {
+            return []
+        }
+        
         var items: [ContextMenuItem] = []
         
         if case let .search(search) = source {
@@ -146,20 +150,29 @@ func chatContextMenuItems(context: AccountContext, peerId: PeerId, source: ChatC
                 })))
             }
             
-            let isPinned = index.pinningIndex != nil
-            items.append(.action(ContextMenuActionItem(text: isPinned ? strings.ChatList_Context_Unpin : strings.ChatList_Context_Pin, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: isPinned ? "Chat/Context Menu/Unpin" : "Chat/Context Menu/Pin"), color: theme.contextMenu.primaryColor) }, action: { _, f in
-                let _ = (toggleItemPinned(postbox: context.account.postbox, groupId: group, itemId: .peer(peerId))
-                |> deliverOnMainQueue).start(next: { result in
-                    switch result {
-                    case .done:
-                        break
-                    case let .limitExceeded(maxCount):
-                        break
-                        //strongSelf.presentAlert?(strongSelf.currentState.presentationData.strings.DialogList_PinLimitError("\(maxCount)").0)
-                    }
-                    f(.default)
-                })
-            })))
+            if case let .chatList(filter) = source {
+                let location: TogglePeerChatPinnedLocation
+                if let filter = filter {
+                    location = .filter(filter.id)
+                } else {
+                    location = .group(group)
+                }
+                
+                let isPinned = getPinnedItemIds(transaction: transaction, location: location).contains(.peer(peerId))
+                
+                items.append(.action(ContextMenuActionItem(text: isPinned ? strings.ChatList_Context_Unpin : strings.ChatList_Context_Pin, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: isPinned ? "Chat/Context Menu/Unpin" : "Chat/Context Menu/Pin"), color: theme.contextMenu.primaryColor) }, action: { _, f in
+                    let _ = (toggleItemPinned(postbox: context.account.postbox, location: location, itemId: .peer(peerId))
+                    |> deliverOnMainQueue).start(next: { result in
+                        switch result {
+                        case .done:
+                            break
+                        case .limitExceeded:
+                            break
+                        }
+                        f(.default)
+                    })
+                })))
+            }
         
             if !isSavedMessages, let notificationSettings = transaction.getPeerNotificationSettings(peerId) as? TelegramPeerNotificationSettings {
                 var isMuted = false
@@ -175,7 +188,7 @@ func chatContextMenuItems(context: AccountContext, peerId: PeerId, source: ChatC
             }
         } else {
             if case .search = source {
-                if let channel = peer as? TelegramChannel {
+                if let _ = peer as? TelegramChannel {
                     items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_JoinChannel, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Add"), color: theme.contextMenu.primaryColor) }, action: { _, f in
                         var createSignal = context.peerChannelMemberCategoriesContextsManager.join(account: context.account, peerId: peerId)
                         var cancelImpl: (() -> Void)?
