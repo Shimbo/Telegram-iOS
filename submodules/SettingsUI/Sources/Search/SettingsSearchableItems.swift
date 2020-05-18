@@ -409,9 +409,6 @@ private func notificationSearchableItems(context: AccountContext, settings: Glob
         SettingsSearchableItem(id: .notifications(16), title: strings.Notifications_DisplayNamesOnLockScreen, alternate: synonyms(strings.SettingsSearch_Synonyms_Notifications_DisplayNamesOnLockScreen), icon: icon, breadcrumbs: [strings.Settings_NotificationsAndSounds], present: { context, _, present in
             presentNotificationSettings(context, present, .displayNamesOnLockscreen)
         }),
-        SettingsSearchableItem(id: .notifications(18), title: strings.Notifications_Badge_IncludePublicGroups, alternate: synonyms(strings.SettingsSearch_Synonyms_Notifications_BadgeIncludeMutedPublicGroups), icon: icon, breadcrumbs: [strings.Settings_NotificationsAndSounds, strings.Notifications_Badge], present: { context, _, present in
-            presentNotificationSettings(context, present, .includePublicGroups)
-        }),
         SettingsSearchableItem(id: .notifications(19), title: strings.Notifications_Badge_IncludeChannels, alternate: synonyms(strings.SettingsSearch_Synonyms_Notifications_BadgeIncludeMutedChannels), icon: icon, breadcrumbs: [strings.Settings_NotificationsAndSounds, strings.Notifications_Badge], present: { context, _, present in
             presentNotificationSettings(context, present, .includeChannels)
         }),
@@ -882,6 +879,7 @@ func settingsSearchableItems(context: AccountContext, notificationExceptionsList
         })
         allItems.append(passport)
 
+        #if ENABLE_WALLET
         if hasWallet {
             let wallet = SettingsSearchableItem(id: .wallet(0), title: strings.Settings_Wallet, alternate: synonyms(strings.SettingsSearch_Synonyms_Wallet), icon: .wallet, breadcrumbs: [], present: { context, _, present in
                 context.sharedContext.openWallet(context: context, walletContext: .generic, present: { c in
@@ -890,6 +888,7 @@ func settingsSearchableItems(context: AccountContext, notificationExceptionsList
             })
             allItems.append(wallet)
         }
+        #endif
         
         let support = SettingsSearchableItem(id: .support(0), title: strings.Settings_Support, alternate: synonyms(strings.SettingsSearch_Synonyms_Support), icon: .support, breadcrumbs: [], present: { context, _, present in
             let _ = (supportPeerId(account: context.account)

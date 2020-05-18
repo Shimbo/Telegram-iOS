@@ -4,7 +4,7 @@ import TelegramCore
 import SyncCore
 import Postbox
 import TelegramUIPreferences
-import libtgvoip
+import TgVoip
 
 private func callConnectionDescription(_ connection: CallSessionConnection) -> OngoingCallConnectionDescription {
     return OngoingCallConnectionDescription(connectionId: connection.id, ip: connection.ip, ipv6: connection.ipv6, port: connection.port, peerTag: connection.peerTag)
@@ -171,6 +171,10 @@ public final class OngoingCallContext {
     
     public static var maxLayer: Int32 {
         return OngoingCallThreadLocalContext.maxLayer()
+    }
+    
+    public static var version: String {
+        return OngoingCallThreadLocalContext.version()!
     }
     
     public init(account: Account, callSessionManager: CallSessionManager, internalId: CallSessionInternalId, proxyServer: ProxyServerSettings?, initialNetworkType: NetworkType, updatedNetworkType: Signal<NetworkType, NoError>, serializedData: String?, dataSaving: VoiceCallDataSaving, derivedState: VoipDerivedState) {

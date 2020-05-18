@@ -1,8 +1,13 @@
 import Foundation
 
-struct PeerIdAndNamespace: Hashable {
-    let peerId: PeerId
-    let namespace: MessageId.Namespace
+public struct PeerIdAndNamespace: Hashable {
+    public let peerId: PeerId
+    public let namespace: MessageId.Namespace
+    
+    public init(peerId: PeerId, namespace: MessageId.Namespace) {
+        self.peerId = peerId
+        self.namespace = namespace
+    }
 }
 
 private func canContainHoles(_ peerIdAndNamespace: PeerIdAndNamespace, seedConfiguration: SeedConfiguration) -> Bool {
@@ -172,7 +177,7 @@ private func binaryIndexOrLower(_ inputArr: [MutableMessageHistoryEntry], _ sear
     return hi
 }
 
-private func sampleEntries(orderedEntriesBySpace: [PeerIdAndNamespace: OrderedHistoryViewEntries], anchor: HistoryViewAnchor, halfLimit: Int) -> (lowerOrAtAnchor:[(PeerIdAndNamespace, Int)], higherThanAnchor: [(PeerIdAndNamespace, Int)]) {
+private func sampleEntries(orderedEntriesBySpace: [PeerIdAndNamespace: OrderedHistoryViewEntries], anchor: HistoryViewAnchor, halfLimit: Int) -> (lowerOrAtAnchor: [(PeerIdAndNamespace, Int)], higherThanAnchor: [(PeerIdAndNamespace, Int)]) {
     var previousAnchorIndices: [PeerIdAndNamespace: Int] = [:]
     var nextAnchorIndices: [PeerIdAndNamespace: Int] = [:]
     for (space, items) in orderedEntriesBySpace {
@@ -1046,7 +1051,7 @@ final class HistoryViewLoadedState {
         
         if let associatedIndices = self.orderedEntriesBySpace[space]!.indicesForAssociatedMessageId(entry.index.id) {
             for associatedIndex in associatedIndices {
-                self.orderedEntriesBySpace[space]!.update(index: associatedIndex, { current in
+                let _ = self.orderedEntriesBySpace[space]!.update(index: associatedIndex, { current in
                     switch current {
                     case .IntermediateMessageEntry:
                         return current

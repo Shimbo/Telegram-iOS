@@ -2,7 +2,7 @@ import Foundation
 import Postbox
 import TelegramApi
 import SwiftSignalKit
-
+import CryptoUtils
 import SyncCore
 
 enum PendingMessageUploadedContent {
@@ -38,11 +38,25 @@ enum PendingMessageUploadError {
     case generic
 }
 
-func messageContentToUpload(network: Network, postbox: Postbox, auxiliaryMethods: AccountAuxiliaryMethods, transformOutgoingMessageMedia: TransformOutgoingMessageMedia?, messageMediaPreuploadManager: MessageMediaPreuploadManager, revalidationContext: MediaReferenceRevalidationContext, forceReupload: Bool, isGrouped: Bool, message: Message) -> (Signal<PendingMessageUploadedContentResult, PendingMessageUploadError>, PendingMessageUploadedContentType) {
+enum MessageContentToUpload {
+    case signal(Signal<PendingMessageUploadedContentResult, PendingMessageUploadError>, PendingMessageUploadedContentType)
+    case immediate(PendingMessageUploadedContentResult, PendingMessageUploadedContentType)
+    
+    var type: PendingMessageUploadedContentType {
+        switch self {
+        case let .signal(_, type):
+            return type
+        case let .immediate(_, type):
+            return type
+        }
+    }
+}
+
+func messageContentToUpload(network: Network, postbox: Postbox, auxiliaryMethods: AccountAuxiliaryMethods, transformOutgoingMessageMedia: TransformOutgoingMessageMedia?, messageMediaPreuploadManager: MessageMediaPreuploadManager, revalidationContext: MediaReferenceRevalidationContext, forceReupload: Bool, isGrouped: Bool, message: Message) -> MessageContentToUpload {
     return messageContentToUpload(network: network, postbox: postbox, auxiliaryMethods: auxiliaryMethods, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messageMediaPreuploadManager: messageMediaPreuploadManager, revalidationContext: revalidationContext, forceReupload: forceReupload, isGrouped: isGrouped, peerId: message.id.peerId, messageId: message.id, attributes: message.attributes, text: message.text, media: message.media)
 }
 
-func messageContentToUpload(network: Network, postbox: Postbox, auxiliaryMethods: AccountAuxiliaryMethods, transformOutgoingMessageMedia: TransformOutgoingMessageMedia?, messageMediaPreuploadManager: MessageMediaPreuploadManager, revalidationContext: MediaReferenceRevalidationContext, forceReupload: Bool, isGrouped: Bool, peerId: PeerId, messageId: MessageId?, attributes: [MessageAttribute], text: String, media: [Media]) -> (Signal<PendingMessageUploadedContentResult, PendingMessageUploadError>, PendingMessageUploadedContentType) {
+func messageContentToUpload(network: Network, postbox: Postbox, auxiliaryMethods: AccountAuxiliaryMethods, transformOutgoingMessageMedia: TransformOutgoingMessageMedia?, messageMediaPreuploadManager: MessageMediaPreuploadManager, revalidationContext: MediaReferenceRevalidationContext, forceReupload: Bool, isGrouped: Bool, peerId: PeerId, messageId: MessageId?, attributes: [MessageAttribute], text: String, media: [Media]) -> MessageContentToUpload {
     var contextResult: OutgoingChatContextResultMessageAttribute?
     var autoremoveAttribute: AutoremoveTimeoutMessageAttribute?
     for attribute in attributes {
@@ -65,15 +79,15 @@ func messageContentToUpload(network: Network, postbox: Postbox, auxiliaryMethods
     }
     
     if let media = media.first as? TelegramMediaAction, media.action == .historyScreenshot {
-        return (.single(.content(PendingMessageUploadedContentAndReuploadInfo(content: .messageScreenshot, reuploadInfo: nil))), .none)
+        return .immediate(.content(PendingMessageUploadedContentAndReuploadInfo(content: .messageScreenshot, reuploadInfo: nil)), .none)
     } else if let forwardInfo = forwardInfo {
-        return (.single(.content(PendingMessageUploadedContentAndReuploadInfo(content: .forward(forwardInfo), reuploadInfo: nil))), .text)
+        return .immediate(.content(PendingMessageUploadedContentAndReuploadInfo(content: .forward(forwardInfo), reuploadInfo: nil)), .text)
     } else if let contextResult = contextResult {
-        return (.single(.content(PendingMessageUploadedContentAndReuploadInfo(content: .chatContextResult(contextResult), reuploadInfo: nil))), .text)
+        return .immediate(.content(PendingMessageUploadedContentAndReuploadInfo(content: .chatContextResult(contextResult), reuploadInfo: nil)), .text)
     } else if let media = media.first, let mediaResult = mediaContentToUpload(network: network, postbox: postbox, auxiliaryMethods: auxiliaryMethods, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messageMediaPreuploadManager: messageMediaPreuploadManager, revalidationContext: revalidationContext, forceReupload: forceReupload, isGrouped: isGrouped, peerId: peerId, media: media, text: text, autoremoveAttribute: autoremoveAttribute, messageId: messageId, attributes: attributes) {
-        return (mediaResult, .media)
+        return .signal(mediaResult, .media)
     } else {
-        return (.single(.content(PendingMessageUploadedContentAndReuploadInfo(content: .text(text), reuploadInfo: nil))), .text)
+        return .signal(.single(.content(PendingMessageUploadedContentAndReuploadInfo(content: .text(text), reuploadInfo: nil))), .text)
     }
 }
 
@@ -161,8 +175,21 @@ func mediaContentToUpload(network: Network, postbox: Postbox, auxiliaryMethods: 
             pollMediaFlags |= 1 << 0
             correctAnswers = correctAnswersValue.map { Buffer(data: $0) }
         }
-        let inputPoll = Api.InputMedia.inputMediaPoll(flags: pollMediaFlags, poll: Api.Poll.poll(id: 0, flags: pollFlags, question: poll.text, answers: poll.options.map({ $0.apiOption })), correctAnswers: correctAnswers)
+        if poll.deadlineTimeout != nil {
+            pollFlags |= 1 << 4
+        }
+        var mappedSolution: String?
+        var mappedSolutionEntities: [Api.MessageEntity]?
+        if let solution = poll.results.solution {
+            mappedSolution = solution.text
+            mappedSolutionEntities = apiTextAttributeEntities(TextEntitiesMessageAttribute(entities: solution.entities), associatedPeers: SimpleDictionary())
+            pollMediaFlags |= 1 << 1
+        }
+        let inputPoll = Api.InputMedia.inputMediaPoll(flags: pollMediaFlags, poll: Api.Poll.poll(id: 0, flags: pollFlags, question: poll.text, answers: poll.options.map({ $0.apiOption }), closePeriod: poll.deadlineTimeout, closeDate: nil), correctAnswers: correctAnswers, solution: mappedSolution, solutionEntities: mappedSolutionEntities)
         return .single(.content(PendingMessageUploadedContentAndReuploadInfo(content: .media(inputPoll, text), reuploadInfo: nil)))
+    } else if let media = media as? TelegramMediaDice {
+        let input = Api.InputMedia.inputMediaDice(emoticon: media.emoji)
+        return .single(.content(PendingMessageUploadedContentAndReuploadInfo(content: .media(input, text), reuploadInfo: nil)))
     } else {
         return nil
     }
@@ -316,7 +343,7 @@ private func uploadedMediaImageContent(network: Network, postbox: Postbox, trans
                                 transaction.updateMessage(messageId, update: { currentMessage in
                                     var storeForwardInfo: StoreMessageForwardInfo?
                                     if let forwardInfo = currentMessage.forwardInfo {
-                                        storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: nil)
+                                        storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: nil, psaType: nil)
                                     }
                                     var updatedAttributes = currentMessage.attributes
                                     if let index = updatedAttributes.firstIndex(where: { $0 is OutgoingMessageInfoAttribute }){
@@ -594,7 +621,7 @@ private func uploadedMediaFileContent(network: Network, postbox: Postbox, auxili
                             transaction.updateMessage(messageId, update: { currentMessage in
                                 var storeForwardInfo: StoreMessageForwardInfo?
                                 if let forwardInfo = currentMessage.forwardInfo {
-                                    storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: nil)
+                                    storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: nil, psaType: nil)
                                 }
                                 var updatedAttributes = currentMessage.attributes
                                 if let index = updatedAttributes.firstIndex(where: { $0 is OutgoingMessageInfoAttribute }){

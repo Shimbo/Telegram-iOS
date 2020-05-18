@@ -11,6 +11,7 @@ import PresentationDataUtils
 import AccountContext
 import AlertUI
 import PresentationDataUtils
+import TextFormat
 
 private struct OrderedLinkedListItemOrderingId: RawRepresentable, Hashable {
     var rawValue: Int
@@ -159,8 +160,10 @@ private final class CreatePollControllerArguments {
     let updateMultipleChoice: (Bool) -> Void
     let displayMultipleChoiceDisabled: () -> Void
     let updateQuiz: (Bool) -> Void
+    let updateSolutionText: (NSAttributedString) -> Void
+    let solutionTextFocused: (Bool) -> Void
     
-    init(updatePollText: @escaping (String) -> Void, updateOptionText: @escaping (Int, String, Bool) -> Void, moveToNextOption: @escaping (Int) -> Void, moveToPreviousOption: @escaping (Int) -> Void, removeOption: @escaping (Int, Bool) -> Void, optionFocused: @escaping (Int, Bool) -> Void, setItemIdWithRevealedOptions: @escaping (Int?, Int?) -> Void, toggleOptionSelected: @escaping (Int) -> Void, updateAnonymous: @escaping (Bool) -> Void, updateMultipleChoice: @escaping (Bool) -> Void, displayMultipleChoiceDisabled: @escaping () -> Void, updateQuiz: @escaping (Bool) -> Void) {
+    init(updatePollText: @escaping (String) -> Void, updateOptionText: @escaping (Int, String, Bool) -> Void, moveToNextOption: @escaping (Int) -> Void, moveToPreviousOption: @escaping (Int) -> Void, removeOption: @escaping (Int, Bool) -> Void, optionFocused: @escaping (Int, Bool) -> Void, setItemIdWithRevealedOptions: @escaping (Int?, Int?) -> Void, toggleOptionSelected: @escaping (Int) -> Void, updateAnonymous: @escaping (Bool) -> Void, updateMultipleChoice: @escaping (Bool) -> Void, displayMultipleChoiceDisabled: @escaping () -> Void, updateQuiz: @escaping (Bool) -> Void, updateSolutionText: @escaping (NSAttributedString) -> Void, solutionTextFocused: @escaping (Bool) -> Void) {
         self.updatePollText = updatePollText
         self.updateOptionText = updateOptionText
         self.moveToNextOption = moveToNextOption
@@ -173,6 +176,8 @@ private final class CreatePollControllerArguments {
         self.updateMultipleChoice = updateMultipleChoice
         self.displayMultipleChoiceDisabled = displayMultipleChoiceDisabled
         self.updateQuiz = updateQuiz
+        self.updateSolutionText = updateSolutionText
+        self.solutionTextFocused = solutionTextFocused
     }
 }
 
@@ -180,6 +185,7 @@ private enum CreatePollSection: Int32 {
     case text
     case options
     case settings
+    case quizSolution
 }
 
 private enum CreatePollEntryId: Hashable {
@@ -192,12 +198,16 @@ private enum CreatePollEntryId: Hashable {
     case multipleChoice
     case quiz
     case quizInfo
+    case quizSolutionHeader
+    case quizSolutionText
+    case quizSolutionInfo
 }
 
 private enum CreatePollEntryTag: Equatable, ItemListItemTag {
     case text
     case option(Int)
     case optionsInfo
+    case solution
     
     func isEqual(to other: ItemListItemTag) -> Bool {
         if let other = other as? CreatePollEntryTag {
@@ -208,16 +218,31 @@ private enum CreatePollEntryTag: Equatable, ItemListItemTag {
     }
 }
 
+private struct SolutionText: Equatable {
+    var value: NSAttributedString
+    
+    init(value: NSAttributedString) {
+        self.value = value
+    }
+    
+    static func ==(lhs: SolutionText, rhs: SolutionText) -> Bool {
+        return lhs.value.isEqual(to: rhs.value)
+    }
+}
+
 private enum CreatePollEntry: ItemListNodeEntry {
     case textHeader(String, ItemListSectionHeaderAccessoryText)
     case text(String, String, Int)
     case optionsHeader(String)
-    case option(id: Int, ordering: OrderedLinkedListItemOrdering, placeholder: String, text: String, revealed: Bool, hasNext: Bool, isLast: Bool, isSelected: Bool?)
+    case option(id: Int, ordering: OrderedLinkedListItemOrdering, placeholder: String, text: String, revealed: Bool, hasNext: Bool, isLast: Bool, canMove: Bool, isSelected: Bool?)
     case optionsInfo(String)
     case anonymousVotes(String, Bool)
     case multipleChoice(String, Bool, Bool)
     case quiz(String, Bool)
     case quizInfo(String)
+    case quizSolutionHeader(String)
+    case quizSolutionText(placeholder: String, text: SolutionText)
+    case quizSolutionInfo(String)
     
     var section: ItemListSectionId {
         switch self {
@@ -227,6 +252,8 @@ private enum CreatePollEntry: ItemListNodeEntry {
             return CreatePollSection.options.rawValue
         case .anonymousVotes, .multipleChoice, .quiz, .quizInfo:
             return CreatePollSection.settings.rawValue
+        case .quizSolutionHeader, .quizSolutionText, .quizSolutionInfo:
+            return CreatePollSection.quizSolution.rawValue
         }
     }
     
@@ -262,6 +289,12 @@ private enum CreatePollEntry: ItemListNodeEntry {
             return .quiz
         case .quizInfo:
             return .quizInfo
+        case .quizSolutionHeader:
+            return .quizSolutionHeader
+        case .quizSolutionText:
+            return .quizSolutionText
+        case .quizSolutionInfo:
+            return .quizSolutionInfo
         }
     }
     
@@ -285,6 +318,12 @@ private enum CreatePollEntry: ItemListNodeEntry {
             return 1004
         case .quizInfo:
             return 1005
+        case .quizSolutionHeader:
+            return 1006
+        case .quizSolutionText:
+            return 1007
+        case .quizSolutionInfo:
+            return 1008
         }
     }
     
@@ -314,7 +353,7 @@ private enum CreatePollEntry: ItemListNodeEntry {
             }, tag: CreatePollEntryTag.text)
         case let .optionsHeader(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
-        case let .option(id, _, placeholder, text, revealed, hasNext, isLast, isSelected):
+        case let .option(id, _, placeholder, text, revealed, hasNext, isLast, canMove, isSelected):
             return CreatePollOptionItem(presentationData: presentationData, id: id, placeholder: placeholder, value: text, isSelected: isSelected, maxLength: maxOptionLength, editing: CreatePollOptionItemEditing(editable: true, hasActiveRevealControls: revealed), sectionId: self.section, setItemIdWithRevealedOptions: { id, fromId in
                 arguments.setItemIdWithRevealedOptions(id, fromId)
             }, updated: { value, isFocused in
@@ -328,6 +367,7 @@ private enum CreatePollEntry: ItemListNodeEntry {
                     arguments.moveToPreviousOption(id)
                 }
             }, canDelete: !isLast,
+            canMove: canMove,
             focused: { isFocused in
                 arguments.optionFocused(id, isFocused)
             }, toggleSelected: {
@@ -351,6 +391,16 @@ private enum CreatePollEntry: ItemListNodeEntry {
             })
         case let .quizInfo(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        case let .quizSolutionHeader(text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+        case let .quizSolutionText(placeholder, text):
+            return CreatePollTextInputItem(presentationData: presentationData, text: text.value, placeholder: placeholder, maxLength: CreatePollTextInputItemTextLimit(value: 200, display: true), sectionId: self.section, style: .blocks, textUpdated: { text in
+                arguments.updateSolutionText(text)
+            }, updatedFocus: { value in
+                arguments.solutionTextFocused(value)
+            }, tag: CreatePollEntryTag.solution)
+        case let .quizSolutionInfo(text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         }
     }
 }
@@ -370,6 +420,8 @@ private struct CreatePollControllerState: Equatable {
     var isAnonymous: Bool = true
     var isMultipleChoice: Bool = false
     var isQuiz: Bool = false
+    var solutionText: SolutionText = SolutionText(value: NSAttributedString(string: ""))
+    var isEditingSolution: Bool = false
 }
 
 private func createPollControllerEntries(presentationData: PresentationData, peer: Peer, state: CreatePollControllerState, limitsConfiguration: LimitsConfiguration, defaultIsQuiz: Bool?) -> [CreatePollEntry] {
@@ -393,7 +445,7 @@ private func createPollControllerEntries(presentationData: PresentationData, pee
         let isSecondLast = state.options.count == 2 && i == 0
         let isLast = i == state.options.count - 1
         let option = state.options[i].item
-        entries.append(.option(id: option.id, ordering: state.options[i].ordering, placeholder: isLast ? presentationData.strings.CreatePoll_AddOption : presentationData.strings.CreatePoll_OptionPlaceholder, text: option.text, revealed: state.optionIdWithRevealControls == option.id, hasNext: i != 9, isLast: isLast || isSecondLast, isSelected: state.isQuiz ? option.isSelected : nil))
+        entries.append(.option(id: option.id, ordering: state.options[i].ordering, placeholder: isLast ? presentationData.strings.CreatePoll_AddOption : presentationData.strings.CreatePoll_OptionPlaceholder, text: option.text, revealed: state.optionIdWithRevealControls == option.id, hasNext: i != 9, isLast: isLast || isSecondLast, canMove: !isLast || state.options.count == 10, isSelected: state.isQuiz ? option.isSelected : nil))
     }
     if state.options.count < maxOptionCount {
         entries.append(.optionsInfo(presentationData.strings.CreatePoll_AddMoreOptions(Int32(maxOptionCount - state.options.count))))
@@ -409,14 +461,24 @@ private func createPollControllerEntries(presentationData: PresentationData, pee
     if canBePublic {
         entries.append(.anonymousVotes(presentationData.strings.CreatePoll_Anonymous, state.isAnonymous))
     }
+    var isQuiz = false
     if let defaultIsQuiz = defaultIsQuiz {
         if !defaultIsQuiz {
             entries.append(.multipleChoice(presentationData.strings.CreatePoll_MultipleChoice, state.isMultipleChoice && !state.isQuiz, !state.isQuiz))
+        } else {
+            isQuiz = true
         }
     } else {
         entries.append(.multipleChoice(presentationData.strings.CreatePoll_MultipleChoice, state.isMultipleChoice && !state.isQuiz, !state.isQuiz))
         entries.append(.quiz(presentationData.strings.CreatePoll_Quiz, state.isQuiz))
         entries.append(.quizInfo(presentationData.strings.CreatePoll_QuizInfo))
+        isQuiz = state.isQuiz
+    }
+    
+    if isQuiz {
+        entries.append(.quizSolutionHeader(presentationData.strings.CreatePoll_ExplanationHeader))
+        entries.append(.quizSolutionText(placeholder: presentationData.strings.CreatePoll_Explanation, text: state.solutionText))
+        entries.append(.quizSolutionInfo(presentationData.strings.CreatePoll_ExplanationInfo))
     }
     
     return entries
@@ -435,8 +497,10 @@ public func createPollController(context: AccountContext, peer: Peer, isQuiz: Bo
     
     var presentControllerImpl: ((ViewController, Any?) -> Void)?
     var dismissImpl: (() -> Void)?
+    var dismissInputImpl: (() -> Void)?
     var ensureTextVisibleImpl: (() -> Void)?
     var ensureOptionVisibleImpl: ((Int) -> Void)?
+    var ensureSolutionVisibleImpl: (() -> Void)?
     var displayQuizTooltipImpl: ((Bool) -> Void)?
     var attemptNavigationImpl: (() -> Bool)?
     
@@ -453,6 +517,7 @@ public func createPollController(context: AccountContext, peer: Peer, isQuiz: Bo
             var state = state
             state.focusOptionId = nil
             state.text = value
+            state.isEditingSolution = false
             return state
         }
         ensureTextVisibleImpl?()
@@ -662,6 +727,19 @@ public func createPollController(context: AccountContext, peer: Peer, isQuiz: Bo
         if value {
             displayQuizTooltipImpl?(value)
         }
+    }, updateSolutionText: { text in
+        updateState { state in
+            var state = state
+            state.solutionText = SolutionText(value: text)
+            state.focusOptionId = nil
+            state.isEditingSolution = true
+            return state
+        }
+        ensureSolutionVisibleImpl?()
+    }, solutionTextFocused: { isFocused in
+        if isFocused {
+            ensureSolutionVisibleImpl?()
+        }
     })
     
     let previousOptionIds = Atomic<[Int]?>(value: nil)
@@ -700,6 +778,9 @@ public func createPollController(context: AccountContext, peer: Peer, isQuiz: Bo
             if !hasSelectedOptions {
                 enabled = false
             }
+            if state.solutionText.value.string.count > 200 {
+                enabled = false
+            }
         }
         if nonEmptyOptionCount < 2 {
             enabled = false
@@ -725,14 +806,26 @@ public func createPollController(context: AccountContext, peer: Peer, isQuiz: Bo
             } else {
                 publicity = .public
             }
+            var resolvedSolution: TelegramMediaPollResults.Solution?
             let kind: TelegramMediaPollKind
             if state.isQuiz {
                 kind = .quiz
+                if !state.solutionText.value.string.isEmpty {
+                    let entities = generateTextEntities(state.solutionText.value.string, enabledTypes: .url, currentEntities: generateChatInputTextEntities(state.solutionText.value))
+                    resolvedSolution = TelegramMediaPollResults.Solution(text: state.solutionText.value.string, entities: entities)
+                }
             } else {
                 kind = .poll(multipleAnswers: state.isMultipleChoice)
             }
+            
+            var deadlineTimeout: Int32?
+            #if DEBUG
+            deadlineTimeout = 65
+            #endif
+            
             dismissImpl?()
-            completion(.message(text: "", attributes: [], mediaReference: .standalone(media: TelegramMediaPoll(pollId: MediaId(namespace: Namespaces.Media.LocalPoll, id: arc4random64()), publicity: publicity, kind: kind, text: processPollText(state.text), options: options, correctAnswers: correctAnswers, results: TelegramMediaPollResults(voters: nil, totalVoters: nil, recentVoters: []), isClosed: false)), replyToMessageId: nil, localGroupingKey: nil))
+            
+            completion(.message(text: "", attributes: [], mediaReference: .standalone(media: TelegramMediaPoll(pollId: MediaId(namespace: Namespaces.Media.LocalPoll, id: arc4random64()), publicity: publicity, kind: kind, text: processPollText(state.text), options: options, correctAnswers: correctAnswers, results: TelegramMediaPollResults(voters: nil, totalVoters: nil, recentVoters: [], solution: resolvedSolution), isClosed: false, deadlineTimeout: deadlineTimeout)), replyToMessageId: nil, localGroupingKey: nil))
         })
         
         let leftNavigationButton = ItemListNavigationButton(content: .text(presentationData.strings.Common_Cancel), style: .regular, enabled: true, action: {
@@ -753,6 +846,9 @@ public func createPollController(context: AccountContext, peer: Peer, isQuiz: Bo
             } else {
                 ensureVisibleItemTag = focusItemTag
             }
+        } else if state.isEditingSolution {
+            focusItemTag = CreatePollEntryTag.solution
+            ensureVisibleItemTag = focusItemTag
         } else {
             focusItemTag = CreatePollEntryTag.text
             ensureVisibleItemTag = focusItemTag
@@ -793,6 +889,27 @@ public func createPollController(context: AccountContext, peer: Peer, isQuiz: Bo
             let _ = controller.frameForItemNode({ itemNode in
                 if let itemNode = itemNode as? ItemListItemNode {
                     if let tag = itemNode.tag, tag.isEqual(to: CreatePollEntryTag.text) {
+                        resultItemNode = itemNode as? ListViewItemNode
+                        return true
+                    }
+                }
+                return false
+            })
+            if let resultItemNode = resultItemNode {
+                controller.ensureItemNodeVisible(resultItemNode)
+            }
+        })
+    }
+    ensureSolutionVisibleImpl = { [weak controller] in
+        controller?.afterLayout({
+            guard let controller = controller else {
+                return
+            }
+            
+            var resultItemNode: ListViewItemNode?
+            let _ = controller.frameForItemNode({ itemNode in
+                if let itemNode = itemNode as? ItemListItemNode {
+                    if let tag = itemNode.tag, tag.isEqual(to: CreatePollEntryTag.solution) {
                         resultItemNode = itemNode as? ListViewItemNode
                         return true
                     }
@@ -936,6 +1053,11 @@ public func createPollController(context: AccountContext, peer: Peer, isQuiz: Bo
                         } else {
                             didReorder = previousIndex != options.count
                             options.append(reorderOption.item, id: reorderOption.ordering.id)
+                            
+                            if options.count < maxOptionCount {
+                                options.append(CreatePollControllerOption(text: "", id: state.nextOptionId, isSelected: false), id: nil)
+                                state.nextOptionId += 1
+                            }
                         }
                     }
                 } else if beforeAll {
@@ -953,6 +1075,12 @@ public func createPollController(context: AccountContext, peer: Peer, isQuiz: Bo
                 state.options = options
             }
             return state
+        }
+        
+        if didReorder {
+            DispatchQueue.main.async {
+                dismissInputImpl?()
+            }
         }
         
         return .single(didReorder)
@@ -982,8 +1110,12 @@ public func createPollController(context: AccountContext, peer: Peer, isQuiz: Bo
         }
         return false
     }
+    dismissInputImpl = { [weak controller] in
+        controller?.view.endEditing(true)
+    }
     controller.isOpaqueWhenInOverlay = true
     controller.blocksBackgroundWhenInOverlay = true
+    controller.acceptsFocusWhenInOverlay = true
     controller.experimentalSnapScrollToItem = true
     controller.alwaysSynchronous = true
     

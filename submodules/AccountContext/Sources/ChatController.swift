@@ -1,8 +1,10 @@
 import Foundation
+import UIKit
 import Postbox
 import TelegramCore
 import SyncCore
 import TextFormat
+import AsyncDisplayKit
 import Display
 import SwiftSignalKit
 import TelegramPresentationData
@@ -369,6 +371,7 @@ public protocol ChatController: ViewController {
     
     func updatePresentationMode(_ mode: ChatControllerPresentationMode)
     func beginMessageSearch(_ query: String)
+    func displayPromoAnnouncement(text: String)
 }
 
 public protocol ChatMessagePrevewItemNode: class {

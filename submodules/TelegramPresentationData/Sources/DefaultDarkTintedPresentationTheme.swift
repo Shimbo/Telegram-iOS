@@ -26,7 +26,7 @@ public func customizeDefaultDarkTintedPresentationTheme(theme: PresentationTheme
     var actionSheet = theme.actionSheet
     var contextMenu = theme.contextMenu
     var inAppNotification = theme.inAppNotification
-    
+    var chart = theme.chart
     
     var mainBackgroundColor: UIColor?
     var mainSelectionColor: UIColor?
@@ -234,7 +234,6 @@ public func customizeDefaultDarkTintedPresentationTheme(theme: PresentationTheme
     
     var outgoingBubbleFillColor: UIColor?
     var outgoingBubbleFillGradientColor: UIColor?
-    var outgoingBubbleHighlightedFillColor: UIColor?
     var outgoingPrimaryTextColor: UIColor?
     var outgoingSecondaryTextColor: UIColor?
     var outgoingLinkTextColor: UIColor?
@@ -423,6 +422,15 @@ public func customizeDefaultDarkTintedPresentationTheme(theme: PresentationTheme
         )
     )
     
+    chart = chart.withUpdated(
+        labelsColor: accentColor?.withMultiplied(hue: 1.033, saturation: 0.211, brightness: 0.882).withAlphaComponent(0.6),
+        helperLinesColor: accentColor?.withMultiplied(hue: 1.037, saturation: 0.271, brightness: 0.671).withAlphaComponent(0.35),
+        strongLinesColor: accentColor?.withMultiplied(hue: 1.037, saturation: 0.271, brightness: 0.671).withAlphaComponent(0.35),
+        barStrongLinesColor: accentColor?.withMultiplied(hue: 1.033, saturation: 0.211, brightness: 0.882).withAlphaComponent(0.45),
+        detailsViewColor: accentColor?.withMultiplied(hue: 1.035, saturation: 0.571, brightness: 0.184),
+        rangeViewFrameColor: accentColor?.withMultiplied(hue: 1.030, saturation: 0.494, brightness: 0.349)
+    )
+    
     return PresentationTheme(
         name: title.flatMap { .custom($0) } ?? theme.name,
         index: theme.index,
@@ -437,6 +445,7 @@ public func customizeDefaultDarkTintedPresentationTheme(theme: PresentationTheme
         actionSheet: actionSheet,
         contextMenu: contextMenu,
         inAppNotification: inAppNotification,
+        chart: chart,
         preview: theme.preview
     )
 }
@@ -463,7 +472,6 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
     
     let outgoingBubbleFillGradientColor = accentColor.withMultiplied(hue: 1.019, saturation: 0.731, brightness: 0.59)
     let outgoingBubbleFillColor = outgoingBubbleFillGradientColor.withMultiplied(hue: 0.966, saturation: 0.61, brightness: 0.98)
-    let outgoingBubbleHighlightedFillColor: UIColor
     let outgoingScamColor = UIColor(rgb: 0xffffff)
     let outgoingPrimaryTextColor = UIColor(rgb: 0xffffff)
     let outgoingSecondaryTextColor = UIColor(rgb: 0xffffff, alpha: 0.5)
@@ -503,7 +511,9 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
         segmentedBackgroundColor: mainInputColor,
         segmentedForegroundColor: mainBackgroundColor,
         segmentedTextColor: UIColor(rgb: 0xffffff),
-        segmentedDividerColor: mainSecondaryTextColor.withAlphaComponent(0.5)
+        segmentedDividerColor: mainSecondaryTextColor.withAlphaComponent(0.5),
+        clearButtonBackgroundColor: UIColor(rgb: 0xffffff, alpha: 0.1),
+        clearButtonForegroundColor: UIColor(rgb: 0xffffff)
     )
 
     let navigationSearchBar = PresentationThemeNavigationSearchBar(
@@ -643,9 +653,9 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
     let buttonStrokeColor = accentColor.withMultiplied(hue: 1.014, saturation: 0.56, brightness: 0.64).withAlphaComponent(0.15)
     
     let message = PresentationThemeChatMessage(
-        incoming: PresentationThemePartedColors(bubble: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: mainBackgroundColor, highlightedFill: highlightedIncomingBubbleColor, stroke: mainBackgroundColor), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: mainBackgroundColor, highlightedFill: highlightedIncomingBubbleColor, stroke: mainBackgroundColor)), primaryTextColor: .white, secondaryTextColor: mainSecondaryTextColor.withAlphaComponent(0.5), linkTextColor: accentColor, linkHighlightColor: accentColor.withAlphaComponent(0.5), scamColor: UIColor(rgb: 0xff6767), textHighlightColor: UIColor(rgb: 0xf5c038), accentTextColor: accentColor, accentControlColor: accentColor, accentControlDisabledColor: mainSecondaryTextColor.withAlphaComponent(0.5), mediaActiveControlColor: accentColor, mediaInactiveControlColor: accentColor.withAlphaComponent(0.5), mediaControlInnerBackgroundColor: mainBackgroundColor, pendingActivityColor: mainSecondaryTextColor.withAlphaComponent(0.5), fileTitleColor: accentColor, fileDescriptionColor: mainSecondaryTextColor.withAlphaComponent(0.5), fileDurationColor: mainSecondaryTextColor.withAlphaComponent(0.5), mediaPlaceholderColor: accentColor.withMultiplied(hue: 1.019, saturation: 0.585, brightness: 0.23), polls: PresentationThemeChatBubblePolls(radioButton: accentColor.withMultiplied(hue: 0.995, saturation: 0.317, brightness: 0.51), radioProgress: accentColor, highlight: accentColor.withAlphaComponent(0.12), separator: mainSeparatorColor, bar: accentColor, barIconForeground: .white, barPositive: UIColor(rgb: 0x00A700), barNegative: UIColor(rgb: 0xFE3824)), actionButtonsFillColor: PresentationThemeVariableColor(withWallpaper: additionalBackgroundColor.withAlphaComponent(0.5), withoutWallpaper: additionalBackgroundColor.withAlphaComponent(0.5)), actionButtonsStrokeColor: PresentationThemeVariableColor(color: buttonStrokeColor), actionButtonsTextColor: PresentationThemeVariableColor(color: .white), textSelectionColor: accentColor.withAlphaComponent(0.2), textSelectionKnobColor: accentColor),
-        outgoing: PresentationThemePartedColors(bubble: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: outgoingBubbleFillColor, gradientFill: outgoingBubbleFillGradientColor, highlightedFill: highlightedOutgoingBubbleColor, stroke: outgoingBubbleFillColor), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: outgoingBubbleFillColor, gradientFill: outgoingBubbleFillGradientColor, highlightedFill: highlightedOutgoingBubbleColor, stroke: outgoingBubbleFillColor)), primaryTextColor: outgoingPrimaryTextColor, secondaryTextColor: outgoingSecondaryTextColor, linkTextColor: outgoingLinkTextColor, linkHighlightColor: UIColor.white.withAlphaComponent(0.5), scamColor: outgoingScamColor, textHighlightColor: UIColor(rgb: 0xf5c038), accentTextColor: outgoingPrimaryTextColor, accentControlColor: outgoingPrimaryTextColor, accentControlDisabledColor: mainSecondaryTextColor.withAlphaComponent(0.5), mediaActiveControlColor: outgoingPrimaryTextColor, mediaInactiveControlColor: outgoingSecondaryTextColor, mediaControlInnerBackgroundColor: outgoingBubbleFillColor, pendingActivityColor: outgoingSecondaryTextColor, fileTitleColor: outgoingPrimaryTextColor, fileDescriptionColor: outgoingSecondaryTextColor, fileDurationColor: outgoingSecondaryTextColor, mediaPlaceholderColor: accentColor.withMultiplied(hue: 1.019, saturation: 0.804, brightness: 0.51), polls: PresentationThemeChatBubblePolls(radioButton: outgoingPrimaryTextColor, radioProgress: accentColor.withMultiplied(hue: 0.99, saturation: 0.56, brightness: 1.0), highlight: accentColor.withMultiplied(hue: 0.99, saturation: 0.56, brightness: 1.0).withAlphaComponent(0.12), separator: mainSeparatorColor, bar: outgoingPrimaryTextColor, barIconForeground: .clear, barPositive: outgoingPrimaryTextColor, barNegative: outgoingPrimaryTextColor), actionButtonsFillColor: PresentationThemeVariableColor(withWallpaper: additionalBackgroundColor.withAlphaComponent(0.5), withoutWallpaper: additionalBackgroundColor.withAlphaComponent(0.5)), actionButtonsStrokeColor: PresentationThemeVariableColor(color: buttonStrokeColor), actionButtonsTextColor: PresentationThemeVariableColor(color: .white), textSelectionColor: UIColor.white.withAlphaComponent(0.2), textSelectionKnobColor: UIColor.white),
-        freeform: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: mainBackgroundColor, highlightedFill: highlightedIncomingBubbleColor, stroke: mainBackgroundColor), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: mainBackgroundColor, highlightedFill: highlightedIncomingBubbleColor, stroke: mainBackgroundColor)),
+        incoming: PresentationThemePartedColors(bubble: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: mainBackgroundColor, highlightedFill: highlightedIncomingBubbleColor, stroke: mainBackgroundColor, shadow: nil), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: mainBackgroundColor, highlightedFill: highlightedIncomingBubbleColor, stroke: mainBackgroundColor, shadow: nil)), primaryTextColor: .white, secondaryTextColor: mainSecondaryTextColor.withAlphaComponent(0.5), linkTextColor: accentColor, linkHighlightColor: accentColor.withAlphaComponent(0.5), scamColor: UIColor(rgb: 0xff6767), textHighlightColor: UIColor(rgb: 0xf5c038), accentTextColor: accentColor, accentControlColor: accentColor, accentControlDisabledColor: mainSecondaryTextColor.withAlphaComponent(0.5), mediaActiveControlColor: accentColor, mediaInactiveControlColor: accentColor.withAlphaComponent(0.5), mediaControlInnerBackgroundColor: mainBackgroundColor, pendingActivityColor: mainSecondaryTextColor.withAlphaComponent(0.5), fileTitleColor: accentColor, fileDescriptionColor: mainSecondaryTextColor.withAlphaComponent(0.5), fileDurationColor: mainSecondaryTextColor.withAlphaComponent(0.5), mediaPlaceholderColor: accentColor.withMultiplied(hue: 1.019, saturation: 0.585, brightness: 0.23), polls: PresentationThemeChatBubblePolls(radioButton: accentColor.withMultiplied(hue: 0.995, saturation: 0.317, brightness: 0.51), radioProgress: accentColor, highlight: accentColor.withAlphaComponent(0.12), separator: mainSeparatorColor, bar: accentColor, barIconForeground: .white, barPositive: UIColor(rgb: 0x00A700), barNegative: UIColor(rgb: 0xFE3824)), actionButtonsFillColor: PresentationThemeVariableColor(withWallpaper: additionalBackgroundColor.withAlphaComponent(0.5), withoutWallpaper: additionalBackgroundColor.withAlphaComponent(0.5)), actionButtonsStrokeColor: PresentationThemeVariableColor(color: buttonStrokeColor), actionButtonsTextColor: PresentationThemeVariableColor(color: .white), textSelectionColor: accentColor.withAlphaComponent(0.2), textSelectionKnobColor: accentColor),
+        outgoing: PresentationThemePartedColors(bubble: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: outgoingBubbleFillColor, gradientFill: outgoingBubbleFillGradientColor, highlightedFill: highlightedOutgoingBubbleColor, stroke: outgoingBubbleFillColor, shadow: nil), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: outgoingBubbleFillColor, gradientFill: outgoingBubbleFillGradientColor, highlightedFill: highlightedOutgoingBubbleColor, stroke: outgoingBubbleFillColor, shadow: nil)), primaryTextColor: outgoingPrimaryTextColor, secondaryTextColor: outgoingSecondaryTextColor, linkTextColor: outgoingLinkTextColor, linkHighlightColor: UIColor.white.withAlphaComponent(0.5), scamColor: outgoingScamColor, textHighlightColor: UIColor(rgb: 0xf5c038), accentTextColor: outgoingPrimaryTextColor, accentControlColor: outgoingPrimaryTextColor, accentControlDisabledColor: mainSecondaryTextColor.withAlphaComponent(0.5), mediaActiveControlColor: outgoingPrimaryTextColor, mediaInactiveControlColor: outgoingSecondaryTextColor, mediaControlInnerBackgroundColor: outgoingBubbleFillColor, pendingActivityColor: outgoingSecondaryTextColor, fileTitleColor: outgoingPrimaryTextColor, fileDescriptionColor: outgoingSecondaryTextColor, fileDurationColor: outgoingSecondaryTextColor, mediaPlaceholderColor: accentColor.withMultiplied(hue: 1.019, saturation: 0.804, brightness: 0.51), polls: PresentationThemeChatBubblePolls(radioButton: outgoingPrimaryTextColor, radioProgress: accentColor.withMultiplied(hue: 0.99, saturation: 0.56, brightness: 1.0), highlight: accentColor.withMultiplied(hue: 0.99, saturation: 0.56, brightness: 1.0).withAlphaComponent(0.12), separator: mainSeparatorColor, bar: outgoingPrimaryTextColor, barIconForeground: .clear, barPositive: outgoingPrimaryTextColor, barNegative: outgoingPrimaryTextColor), actionButtonsFillColor: PresentationThemeVariableColor(withWallpaper: additionalBackgroundColor.withAlphaComponent(0.5), withoutWallpaper: additionalBackgroundColor.withAlphaComponent(0.5)), actionButtonsStrokeColor: PresentationThemeVariableColor(color: buttonStrokeColor), actionButtonsTextColor: PresentationThemeVariableColor(color: .white), textSelectionColor: UIColor.white.withAlphaComponent(0.2), textSelectionKnobColor: UIColor.white),
+        freeform: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: mainBackgroundColor, highlightedFill: highlightedIncomingBubbleColor, stroke: mainBackgroundColor, shadow: nil), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: mainBackgroundColor, highlightedFill: highlightedIncomingBubbleColor, stroke: mainBackgroundColor, shadow: nil)),
         infoPrimaryTextColor: UIColor(rgb: 0xffffff),
         infoLinkTextColor: accentColor,
         outgoingCheckColor: outgoingCheckColor,
@@ -769,7 +779,12 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
         itemHighlightedBackgroundColor: UIColor(rgb: 0xffffff, alpha: 0.15),
         primaryColor: UIColor(rgb: 0xffffff, alpha: 1.0),
         secondaryColor: UIColor(rgb: 0xffffff, alpha: 0.8),
-        destructiveColor: UIColor(rgb: 0xff6767)
+        destructiveColor: UIColor(rgb: 0xff6767),
+        badgeFillColor: accentColor,
+        badgeForegroundColor: secondaryBadgeTextColor,
+        badgeInactiveFillColor: mainSecondaryTextColor.withAlphaComponent(0.4),
+        badgeInactiveForegroundColor: secondaryBadgeTextColor,
+        extractedContentTintColor: UIColor(rgb: 0xffffff, alpha: 1.0)
     )
 
     let inAppNotification = PresentationThemeInAppNotification(
@@ -784,6 +799,18 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
                 separatorColor: mainSeparatorColor
             )
         )
+    )
+        
+    let chart = PresentationThemeChart(
+        labelsColor: UIColor(rgb: 0xbacce1, alpha: 0.6),
+        helperLinesColor: UIColor(rgb: 0xbacce1, alpha: 0.35),
+        strongLinesColor: UIColor(rgb: 0xbacce1, alpha: 0.35),
+        barStrongLinesColor: UIColor(rgb: 0xbacce1, alpha: 0.45),
+        detailsTextColor: UIColor(rgb: 0xffffff),
+        detailsArrowColor: UIColor(rgb: 0xffffff),
+        detailsViewColor: UIColor(rgb: 0x19232f),
+        rangeViewFrameColor: UIColor(rgb: 0x354659),
+        rangeViewMarkerColor: UIColor(rgb: 0xffffff)
     )
 
     return PresentationTheme(
@@ -800,6 +827,7 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
         actionSheet: actionSheet,
         contextMenu: contextMenu,
         inAppNotification: inAppNotification,
+        chart: chart,
         preview: preview
     )
 }
