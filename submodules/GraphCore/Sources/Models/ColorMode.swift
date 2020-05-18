@@ -25,6 +25,17 @@ typealias NSEdgeInsets = UIEdgeInsets
 
 public protocol ChartThemeContainer {
     func apply(theme: ChartTheme, strings: ChartStrings, animated: Bool)
+    func apply(theme: ChartTheme, animated: Bool)
+}
+
+public extension ChartThemeContainer {
+    func apply(theme: ChartTheme, animated: Bool) {
+        
+    }
+    
+    func apply(theme: ChartTheme, strings: ChartStrings, animated: Bool) {
+        
+    }
 }
 
 public class ChartStrings {

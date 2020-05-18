@@ -411,17 +411,16 @@ final class ChatListIndexTable: Table {
                 for groupId in groupIds {
                     var totalGroupUnreadState: ChatListTotalUnreadState
                     var summary: PeerGroupUnreadCountersCombinedSummary
-                    var summaryFiltered: PeerGroupUnreadCountersCombinedSummary
                     if groupId != PeerGroupId(rawValue: 1) {
-                        if let current = updatedRootState {
-                            var prev = postbox.messageHistoryMetadataTable.getChatListTotalUnreadState()
+                        if let current = updatedTotalStates[groupId] {
+                            var prev = postbox.messageHistoryMetadataTable.getTotalUnreadState(groupId: groupId)
                             prev.absoluteCounters.merge(current.absoluteCounters) { (_, new) in new }
                             prev.filteredCounters.merge(current.filteredCounters) { (_, new) in new }
-                            totalRootUnreadState = prev
-                            //totalRootUnreadState = current
+                            updatedTotalStates[groupId] = prev
                         } else {
-                            totalRootUnreadState = postbox.messageHistoryMetadataTable.getChatListTotalUnreadState()
+                            updatedTotalStates[groupId] = postbox.messageHistoryMetadataTable.getTotalUnreadState(groupId: groupId)
                         }
+                    }
                     if let current = updatedTotalStates[groupId] {
                         totalGroupUnreadState = current
                     } else {
@@ -465,16 +464,23 @@ final class ChatListIndexTable: Table {
                     var initialFilteredValue: (Int32, Bool, Bool) = initialValue
                     var currentFilteredValue: (Int32, Bool, Bool) = currentValue
                     
+                    var initialFilteredStates: CombinedPeerReadState = initialStates
+                    var currentFilteredStates: CombinedPeerReadState = currentStates
+                    
                     if transactionParticipationInTotalUnreadCountUpdates.added.contains(peerId) || transactionParticipationInTotalUnreadCountUpdates.added.contains(notificationPeerId) {
                         initialFilteredValue = (0, false, false)
+                        initialFilteredStates = CombinedPeerReadState(states: [])
                     } else if transactionParticipationInTotalUnreadCountUpdates.removed.contains(peerId) || transactionParticipationInTotalUnreadCountUpdates.removed.contains(notificationPeerId) {
                         currentFilteredValue = (0, false, false)
+                        currentFilteredStates = CombinedPeerReadState(states: [])
                     } else {
                         let isRemovedFromTotalUnreadCount = resolvedIsRemovedFromTotalUnreadCount(globalSettings: globalNotificationSettings, peer: peer, peerSettings: postbox.peerNotificationSettingsTable.getEffective(notificationPeerId))
                         
                         if isRemovedFromTotalUnreadCount {
                             initialFilteredValue = (0, false, false)
                             currentFilteredValue = (0, false, false)
+                            initialFilteredStates = CombinedPeerReadState(states: [])
+                            currentFilteredStates = CombinedPeerReadState(states: [])
                         }
                     }
                     
@@ -725,13 +731,14 @@ final class ChatListIndexTable: Table {
                         summary.namespaces[namespace]!.all.chatCount += 1
                         summary.namespaces[namespace]!.all.messageCount += state.count
                         
-                        if let settings = notificationSettings, !settings.isRemovedFromTotalUnreadCount {
+                        if let settings = notificationSettings, !settings.isRemovedFromTotalUnreadCount(default: false) {
                             summary.namespaces[namespace]!.filtered.chatCount += 1
                             summary.namespaces[namespace]!.filtered.messageCount += state.count
                         }
-                    } else if state.markedUnread {
+                    }
+                    else if state.markedUnread {
                         summary.namespaces[namespace]!.all.chatCount += 1
-                        if let settings = notificationSettings, !settings.isRemovedFromTotalUnreadCount {
+                        if let settings = notificationSettings, !settings.isRemovedFromTotalUnreadCount(default: false) {
                             summary.namespaces[namespace]!.filtered.chatCount += 1
                         }
                     }
