@@ -4,7 +4,7 @@ import Postbox
 import CoreMedia
 import TelegramCore
 import SyncCore
-import FFMpeg
+import FFMpegBinding
 
 private struct StreamContext {
     let index: Int
@@ -351,7 +351,7 @@ final class FFMpegMediaFrameSourceContext: NSObject {
         
         let avFormatContext = FFMpegAVFormatContext()
         
-        guard let avIoContext = FFMpegAVIOContext(bufferSize: Int32(self.ioBufferSize), opaqueContext: Unmanaged.passUnretained(self).toOpaque(), readPacket: readPacketCallback, seek: seekCallback) else {
+        guard let avIoContext = FFMpegAVIOContext(bufferSize: Int32(self.ioBufferSize), opaqueContext: Unmanaged.passUnretained(self).toOpaque(), readPacket: readPacketCallback, writePacket: nil, seek: seekCallback) else {
             self.readingError = true
             return
         }

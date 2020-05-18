@@ -98,7 +98,7 @@ public struct InstantPageGalleryEntry: Equatable {
         }
         
         if let image = self.media.media as? TelegramMediaImage {
-            return InstantImageGalleryItem(context: context, presentationData: presentationData, imageReference: .webPage(webPage: WebpageReference(webPage), media: image), caption: caption, credit: credit, location: self.location, openUrl: openUrl, openUrlOptions: openUrlOptions)
+            return InstantImageGalleryItem(context: context, presentationData: presentationData, itemId: self.index, imageReference: .webPage(webPage: WebpageReference(webPage), media: image), caption: caption, credit: credit, location: self.location, openUrl: openUrl, openUrlOptions: openUrlOptions)
         } else if let file = self.media.media as? TelegramMediaFile {
             if file.isVideo {
                 var indexData: GalleryItemIndexData?
@@ -121,7 +121,7 @@ public struct InstantPageGalleryEntry: Equatable {
                     representations.append(TelegramMediaImageRepresentation(dimensions: dimensions, resource: file.resource))
                 }
                 let image = TelegramMediaImage(imageId: MediaId(namespace: 0, id: 0), representations: representations, immediateThumbnailData: file.immediateThumbnailData, reference: nil, partialReference: nil, flags: [])
-                 return InstantImageGalleryItem(context: context, presentationData: presentationData, imageReference: .webPage(webPage: WebpageReference(webPage), media: image), caption: caption, credit: credit, location: self.location, openUrl: openUrl, openUrlOptions: openUrlOptions)
+                return InstantImageGalleryItem(context: context, presentationData: presentationData, itemId: self.index, imageReference: .webPage(webPage: WebpageReference(webPage), media: image), caption: caption, credit: credit, location: self.location, openUrl: openUrl, openUrlOptions: openUrlOptions)
             }
         } else if let embedWebpage = self.media.media as? TelegramMediaWebpage, case let .Loaded(webpageContent) = embedWebpage.content {
             if let content = WebEmbedVideoContent(webPage: embedWebpage, webpageContent: webpageContent) {
@@ -170,7 +170,7 @@ public class InstantPageGalleryController: ViewController, StandalonePresentable
     private let centralItemTitleView = Promise<UIView?>()
     private let centralItemRightBarButtonItem = Promise<UIBarButtonItem?>()
     private let centralItemNavigationStyle = Promise<GalleryItemNodeNavigationStyle>()
-    private let centralItemFooterContentNode = Promise<GalleryFooterContentNode?>()
+    private let centralItemFooterContentNode = Promise<(GalleryFooterContentNode?, GalleryOverlayContentNode?)>()
     private let centralItemAttributesDisposable = DisposableSet();
     
     private let _hiddenMedia = Promise<InstantPageGalleryEntry?>(nil)
@@ -243,7 +243,7 @@ public class InstantPageGalleryController: ViewController, StandalonePresentable
             self?.navigationItem.rightBarButtonItem = rightBarButtonItem
         }))
         
-        self.centralItemAttributesDisposable.add(self.centralItemFooterContentNode.get().start(next: { [weak self] footerContentNode in
+        self.centralItemAttributesDisposable.add(self.centralItemFooterContentNode.get().start(next: { [weak self] footerContentNode, _ in
             self?.galleryNode.updatePresentationState({
                 $0.withUpdatedFooterContentNode(footerContentNode)
             }, transition: .immediate)

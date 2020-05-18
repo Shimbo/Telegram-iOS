@@ -356,13 +356,18 @@ public func channelMembersController(context: AccountContext, peerId: PeerId) ->
         |> take(1)
         |> deliverOnMainQueue).start(next: { members in
             let disabledIds = members?.compactMap({$0.peer.id}) ?? []
-            let contactsController = context.sharedContext.makeContactMultiselectionController(ContactMultiselectionControllerParams(context: context, mode: .peerSelection(searchChatList: false, searchGroups: false), options: [], filters: [.excludeSelf, .disable(disabledIds)]))
+            let contactsController = context.sharedContext.makeContactMultiselectionController(ContactMultiselectionControllerParams(context: context, mode: .peerSelection(searchChatList: false, searchGroups: false, searchChannels: false), options: [], filters: [.excludeSelf, .disable(disabledIds)]))
             
             addMembersDisposable.set((contactsController.result
             |> deliverOnMainQueue
             |> castError(AddChannelMemberError.self)
-            |> mapToSignal { [weak contactsController] contacts -> Signal<Never, AddChannelMemberError> in
+            |> mapToSignal { [weak contactsController] result -> Signal<Never, AddChannelMemberError> in
                 contactsController?.displayProgress = true
+                
+                var contacts: [ContactListPeerId] = []
+                if case let .result(peerIdsValue, _) = result {
+                    contacts = peerIdsValue
+                }
                 
                 let signal = context.peerChannelMemberCategoriesContextsManager.addMembers(account: context.account, peerId: peerId, memberIds: contacts.compactMap({ contact -> PeerId? in
                     switch contact {
@@ -450,7 +455,7 @@ public func channelMembersController(context: AccountContext, peerId: PeerId) ->
             }
         }))
     }, openPeer: { peer in
-        if let controller = context.sharedContext.makePeerInfoController(context: context, peer: peer, mode: .generic) {
+        if let controller = context.sharedContext.makePeerInfoController(context: context, peer: peer, mode: .generic, avatarInitiallyExpanded: false, fromChat: false) {
             pushControllerImpl?(controller)
         }
     }, inviteViaLink: {
@@ -502,7 +507,7 @@ public func channelMembersController(context: AccountContext, peerId: PeerId) ->
                     return state.withUpdatedSearchingMembers(false)
                 }
             }, openPeer: { peer, _ in
-                if let infoController = context.sharedContext.makePeerInfoController(context: context, peer: peer, mode: .generic) {
+                if let infoController = context.sharedContext.makePeerInfoController(context: context, peer: peer, mode: .generic, avatarInitiallyExpanded: false, fromChat: false) {
                     pushControllerImpl?(infoController)
                 }
             }, pushController: { c in

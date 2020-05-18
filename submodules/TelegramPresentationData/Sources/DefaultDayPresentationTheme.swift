@@ -312,6 +312,7 @@ public func customizeDefaultDayTheme(theme: PresentationTheme, editing: Bool, ti
         actionSheet: actionSheet,
         contextMenu: theme.contextMenu,
         inAppNotification: theme.inAppNotification,
+        chart: theme.chart,
         preview: theme.preview
     )
 }
@@ -360,7 +361,9 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
         segmentedBackgroundColor: UIColor(rgb: 0xe9e9e9),
         segmentedForegroundColor: UIColor(rgb: 0xf7f7f7),
         segmentedTextColor: UIColor(rgb: 0x000000),
-        segmentedDividerColor: UIColor(rgb: 0xd6d6dc)
+        segmentedDividerColor: UIColor(rgb: 0xd6d6dc),
+        clearButtonBackgroundColor: UIColor(rgb: 0xE3E3E3, alpha: 0.78),
+        clearButtonForegroundColor: UIColor(rgb: 0x7f7f7f)
     )
     
     let navigationSearchBar = PresentationThemeNavigationSearchBar(
@@ -487,7 +490,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
 
     let message = PresentationThemeChatMessage(
         incoming: PresentationThemePartedColors(
-            bubble: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xffffff), highlightedFill: UIColor(rgb: 0xd9f4ff), stroke: bubbleStrokeColor), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xffffff), highlightedFill: UIColor(rgb: 0xd9f4ff), stroke: bubbleStrokeColor)),
+            bubble: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xffffff), highlightedFill: UIColor(rgb: 0xd9f4ff), stroke: bubbleStrokeColor, shadow: nil), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xffffff), highlightedFill: UIColor(rgb: 0xd9f4ff), stroke: bubbleStrokeColor, shadow: nil)),
             primaryTextColor: UIColor(rgb: 0x000000),
             secondaryTextColor: UIColor(rgb: 0x525252, alpha: 0.6),
             linkTextColor: UIColor(rgb: 0x004bad),
@@ -509,7 +512,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
             actionButtonsFillColor: PresentationThemeVariableColor(withWallpaper: serviceBackgroundColor, withoutWallpaper: UIColor(rgb: 0x596e89, alpha: 0.35)), actionButtonsStrokeColor: PresentationThemeVariableColor(color: .clear),
             actionButtonsTextColor: PresentationThemeVariableColor(color: UIColor(rgb: 0xffffff)), textSelectionColor: UIColor(rgb: 0x007ee5, alpha: 0.2), textSelectionKnobColor: UIColor(rgb: 0x007ee5)),
         outgoing: PresentationThemePartedColors(
-            bubble: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xe1ffc7), highlightedFill: UIColor(rgb: 0xc8ffa6), stroke: bubbleStrokeColor), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xe1ffc7), highlightedFill: UIColor(rgb: 0xc8ffa6), stroke: bubbleStrokeColor)),
+            bubble: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xe1ffc7), highlightedFill: UIColor(rgb: 0xc8ffa6), stroke: bubbleStrokeColor, shadow: nil), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xe1ffc7), highlightedFill: UIColor(rgb: 0xc8ffa6), stroke: bubbleStrokeColor, shadow: nil)),
             primaryTextColor: UIColor(rgb: 0x000000),
             secondaryTextColor: UIColor(rgb: 0x008c09, alpha: 0.8),
             linkTextColor: UIColor(rgb: 0x004bad),
@@ -533,7 +536,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
             actionButtonsTextColor: PresentationThemeVariableColor(color: UIColor(rgb: 0xffffff)),
             textSelectionColor: UIColor(rgb: 0xbbde9f),
             textSelectionKnobColor: UIColor(rgb: 0x3fc33b)),
-        freeform: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xffffff), highlightedFill: UIColor(rgb: 0xd9f4ff), stroke: UIColor(rgb: 0x86a9c9, alpha: 0.5)), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xffffff), highlightedFill: UIColor(rgb: 0xd9f4ff), stroke: UIColor(rgb: 0x86a9c9, alpha: 0.5))),
+        freeform: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xffffff), highlightedFill: UIColor(rgb: 0xd9f4ff), stroke: UIColor(rgb: 0x86a9c9, alpha: 0.5), shadow: nil), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xffffff), highlightedFill: UIColor(rgb: 0xd9f4ff), stroke: UIColor(rgb: 0x86a9c9, alpha: 0.5), shadow: nil)),
         infoPrimaryTextColor: UIColor(rgb: 0x000000),
         infoLinkTextColor: UIColor(rgb: 0x004bad),
         outgoingCheckColor: UIColor(rgb: 0x19c700),
@@ -550,7 +553,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
     
     let messageDay = PresentationThemeChatMessage(
         incoming: PresentationThemePartedColors(
-            bubble: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xffffff), highlightedFill: UIColor(rgb: 0xdadade), stroke: UIColor(rgb: 0xffffff)), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xf1f1f4), highlightedFill: UIColor(rgb: 0xdadade), stroke: UIColor(rgb: 0xf1f1f4))),
+            bubble: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xffffff), highlightedFill: UIColor(rgb: 0xdadade), stroke: UIColor(rgb: 0xffffff), shadow: nil), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xf1f1f4), highlightedFill: UIColor(rgb: 0xdadade), stroke: UIColor(rgb: 0xf1f1f4), shadow: nil)),
             primaryTextColor: UIColor(rgb: 0x000000),
             secondaryTextColor: UIColor(rgb: 0x525252, alpha: 0.6),
             linkTextColor: UIColor(rgb: 0x004bad),
@@ -575,7 +578,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
             textSelectionColor: UIColor(rgb: 0x007ee5, alpha: 0.3),
             textSelectionKnobColor: UIColor(rgb: 0x007ee5)),
         outgoing: PresentationThemePartedColors(
-            bubble: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0x57b2e0), gradientFill: UIColor(rgb: 0x007ee5), highlightedFill: UIColor(rgb: 0x57b2e0).withMultipliedBrightnessBy(0.7), stroke: .clear), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0x57b2e0), gradientFill: UIColor(rgb: 0x007ee5), highlightedFill: UIColor(rgb: 0x57b2e0).withMultipliedBrightnessBy(0.7), stroke: .clear)),
+            bubble: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0x57b2e0), gradientFill: UIColor(rgb: 0x007ee5), highlightedFill: UIColor(rgb: 0x57b2e0).withMultipliedBrightnessBy(0.7), stroke: .clear, shadow: nil), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0x57b2e0), gradientFill: UIColor(rgb: 0x007ee5), highlightedFill: UIColor(rgb: 0x57b2e0).withMultipliedBrightnessBy(0.7), stroke: .clear, shadow: nil)),
             primaryTextColor: UIColor(rgb: 0xffffff),
             secondaryTextColor: UIColor(rgb: 0xffffff, alpha: 0.65),
             linkTextColor: UIColor(rgb: 0xffffff),
@@ -599,7 +602,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
             actionButtonsTextColor: PresentationThemeVariableColor(withWallpaper: UIColor(rgb: 0xffffff), withoutWallpaper: UIColor(rgb: 0x007ee5)),
             textSelectionColor: UIColor(rgb: 0xffffff, alpha: 0.2),
             textSelectionKnobColor: UIColor(rgb: 0xffffff)),
-        freeform: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xe5e5ea), highlightedFill: UIColor(rgb: 0xdadade), stroke: UIColor(rgb: 0xe5e5ea)), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xe5e5ea), highlightedFill: UIColor(rgb: 0xdadade), stroke: UIColor(rgb: 0xe5e5ea))),
+        freeform: PresentationThemeBubbleColor(withWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xe5e5ea), highlightedFill: UIColor(rgb: 0xdadade), stroke: UIColor(rgb: 0xe5e5ea), shadow: nil), withoutWallpaper: PresentationThemeBubbleColorComponents(fill: UIColor(rgb: 0xe5e5ea), highlightedFill: UIColor(rgb: 0xdadade), stroke: UIColor(rgb: 0xe5e5ea), shadow: nil)),
         infoPrimaryTextColor: UIColor(rgb: 0x000000),
         infoLinkTextColor: UIColor(rgb: 0x004bad),
         outgoingCheckColor: UIColor(rgb: 0xffffff),
@@ -729,9 +732,14 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
         sectionSeparatorColor: UIColor(rgb: 0x8a8a8a, alpha: 0.2),
         itemBackgroundColor: UIColor(rgb: 0x000000, alpha: 0.0),
         itemHighlightedBackgroundColor: UIColor(rgb: 0x3c3c43, alpha: 0.2),
-        primaryColor: UIColor(rgb: 0x000000, alpha: 1.0),
+        primaryColor: UIColor(rgb: 0x000000),
         secondaryColor: UIColor(rgb: 0x000000, alpha: 0.8),
-        destructiveColor: UIColor(rgb: 0xff3b30)
+        destructiveColor: UIColor(rgb: 0xff3b30),
+        badgeFillColor: UIColor(rgb: 0x007ee5),
+        badgeForegroundColor: UIColor(rgb: 0xffffff),
+        badgeInactiveFillColor: UIColor(rgb: 0xb6b6bb),
+        badgeInactiveForegroundColor: UIColor(rgb: 0xffffff),
+        extractedContentTintColor: .white
     )
     
     let inAppNotification = PresentationThemeInAppNotification(
@@ -748,6 +756,18 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
         )
     )
     
+    let chart = PresentationThemeChart(
+        labelsColor: UIColor(rgb: 0x252529, alpha: 0.5),
+        helperLinesColor: UIColor(rgb: 0x182d3b, alpha: 0.3),
+        strongLinesColor: UIColor(rgb: 0x182d3b, alpha: 0.3),
+        barStrongLinesColor: UIColor(rgb: 0x252529, alpha: 0.2),
+        detailsTextColor: UIColor(rgb: 0x6d6d72),
+        detailsArrowColor: UIColor(rgb: 0xc5c7cd),
+        detailsViewColor: UIColor(rgb: 0xf5f5fb),
+        rangeViewFrameColor: UIColor(rgb: 0xcad4de),
+        rangeViewMarkerColor: UIColor(rgb: 0xffffff)
+    )
+    
     return PresentationTheme(
         name: extendingThemeReference?.name ?? .builtin(day ? .day : .dayClassic),
         index: extendingThemeReference?.index ?? PresentationThemeReference.builtin(day ? .day : .dayClassic).index,
@@ -762,6 +782,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
         actionSheet: actionSheet,
         contextMenu: contextMenu,
         inAppNotification: inAppNotification,
+        chart: chart,
         preview: preview
     )
 }

@@ -30,9 +30,16 @@ private class AnimatedStickerNodeDisplayEvents: ASDisplayNode {
     override func didExitHierarchy() {
         super.didExitHierarchy()
         
-        if self.value {
-            self.value = false
-            self.updated?(false)
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self else {
+                return
+            }
+            if !strongSelf.isInHierarchy {
+                if strongSelf.value {
+                    strongSelf.value = false
+                    strongSelf.updated?(false)
+                }
+            }
         }
     }
 }
@@ -42,9 +49,15 @@ public enum AnimatedStickerMode {
     case direct
 }
 
+public enum AnimatedStickerPlaybackPosition {
+    case start
+    case end
+}
+
 public enum AnimatedStickerPlaybackMode {
     case once
     case loop
+    case still(AnimatedStickerPlaybackPosition)
 }
 
 private final class AnimatedStickerFrame {
@@ -72,6 +85,7 @@ private protocol AnimatedStickerFrameSource: class {
     var frameCount: Int { get }
     
     func takeFrame() -> AnimatedStickerFrame?
+    func skipToEnd()
 }
 
 private final class AnimatedStickerFrameSourceWrapper {
@@ -244,6 +258,9 @@ private final class AnimatedStickerCachedFrameSource: AnimatedStickerFrameSource
         self.data = data
         self.dataComplete = complete
     }
+    
+    func skipToEnd() {
+    }
 }
 
 private final class AnimatedStickerDirectFrameSource: AnimatedStickerFrameSource {
@@ -264,9 +281,7 @@ private final class AnimatedStickerDirectFrameSource: AnimatedStickerFrameSource
         self.height = height
         self.bytesPerRow = (4 * Int(width) + 15) & (~15)
         self.currentFrame = 0
-        guard let rawData = TGGUnzipData(data, 8 * 1024 * 1024) else {
-            return nil
-        }
+        let rawData = TGGUnzipData(data, 8 * 1024 * 1024) ?? data
         guard let animation = LottieInstance(data: rawData, cacheKey: "") else {
             return nil
         }
@@ -288,6 +303,10 @@ private final class AnimatedStickerDirectFrameSource: AnimatedStickerFrameSource
             self.animation.renderFrame(with: Int32(frameIndex), into: bytes, width: Int32(self.width), height: Int32(self.height), bytesPerRow: Int32(self.bytesPerRow))
         }
         return AnimatedStickerFrame(data: frameData, type: .argb, width: self.width, height: self.height, bytesPerRow: self.bytesPerRow, index: frameIndex, isLastFrame: frameIndex == self.frameCount - 1)
+    }
+    
+    func skipToEnd() {
+        self.currentFrame = self.frameCount - 1
     }
 }
 
@@ -383,7 +402,7 @@ public final class AnimatedStickerNode: ASDisplayNode {
     
     private var renderer: (AnimationRenderer & ASDisplayNode)?
     
-    private var isPlaying: Bool = false
+    public var isPlaying: Bool = false
     private var canDisplayFirstFrame: Bool = false
     private var playbackMode: AnimatedStickerPlaybackMode = .loop
     
@@ -456,7 +475,9 @@ public final class AnimatedStickerNode: ASDisplayNode {
                 if let directData = try? Data(contentsOf: URL(fileURLWithPath: path), options: [.mappedRead]) {
                     strongSelf.directData = (directData, path, width, height)
                 }
-                if strongSelf.isPlaying {
+                if case let .still(position) = playbackMode {
+                    strongSelf.seekTo(position)
+                } else if strongSelf.isPlaying {
                     strongSelf.play()
                 } else if strongSelf.canDisplayFirstFrame {
                     strongSelf.play(firstFrame: true)
@@ -529,7 +550,7 @@ public final class AnimatedStickerNode: ASDisplayNode {
         let frameSourceHolder = self.frameSource
         self.queue.async { [weak self] in
             var maybeFrameSource: AnimatedStickerFrameSource?
-            var notifyUpdated: (() -> Void)?
+            let notifyUpdated: (() -> Void)? = nil
             if let directData = directData {
                 maybeFrameSource = AnimatedStickerDirectFrameSource(queue: queue, data: directData.0, width: directData.2, height: directData.3)
             } else if let (cachedData, cachedDataComplete) = cachedData {
@@ -597,11 +618,11 @@ public final class AnimatedStickerNode: ASDisplayNode {
         self.reportedStarted = false
         self.timer.swap(nil)?.invalidate()
         if self.playToCompletionOnStop {
-            self.seekToStart()
+            self.seekTo(.start)
         }
     }
     
-    public func seekToStart() {
+    public func seekTo(_ position: AnimatedStickerPlaybackPosition) {
         self.isPlaying = false
         
         let directData = self.directData
@@ -612,6 +633,9 @@ public final class AnimatedStickerNode: ASDisplayNode {
             var maybeFrameSource: AnimatedStickerFrameSource?
             if let directData = directData {
                 maybeFrameSource = AnimatedStickerDirectFrameSource(queue: queue, data: directData.0, width: directData.2, height: directData.3)
+                if position == .end {
+                    maybeFrameSource?.skipToEnd()
+                }
             } else if let (cachedData, cachedDataComplete) = cachedData {
                 if #available(iOS 9.0, *) {
                     maybeFrameSource = AnimatedStickerCachedFrameSource(queue: queue, data: cachedData, complete: cachedDataComplete, notifyUpdated: {})

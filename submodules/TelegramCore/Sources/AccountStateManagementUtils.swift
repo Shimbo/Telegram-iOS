@@ -1298,8 +1298,13 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
                 }
             case let .updatePeerLocated(peers):
                 var peersNearby: [PeerNearby] = []
-                for case let .peerLocated(peer, expires, distance) in peers {
-                    peersNearby.append(PeerNearby(id: peer.peerId, expires: expires, distance: distance))
+                for peer in peers {
+                    switch peer {
+                        case let .peerLocated(peer, expires, distance):
+                            peersNearby.append(.peer(id: peer.peerId, expires: expires, distance: distance))
+                        case let .peerSelfLocated(expires):
+                            peersNearby.append(.selfPeer(expires: expires))
+                    }
                 }
                 updatedState.updatePeersNearby(peersNearby)
             case let .updateNewScheduledMessage(apiMessage):
@@ -1318,6 +1323,12 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
                 }
             case let .updateMessageID(id, randomId):
                 updatedState.updatedOutgoingUniqueMessageIds[randomId] = id
+            case .updateDialogFilters:
+                updatedState.addSyncChatListFilters()
+            case let .updateDialogFilterOrder(order):
+                updatedState.addUpdateChatListFilterOrder(order: order)
+            case let .updateDialogFilter(_, id, filter):
+                updatedState.addUpdateChatListFilter(id: id, filter: filter)
             default:
                 break
         }
@@ -1480,7 +1491,7 @@ private func resolveMissingPeerChatInfos(network: Network, state: AccountMutable
             
             var updatedState = state
             switch result {
-                case let .peerDialogs(dialogs, messages, chats, users, state):
+                case let .peerDialogs(dialogs, messages, chats, users, _):
                     updatedState.mergeChats(chats)
                     updatedState.mergeUsers(users)
                     
@@ -1488,7 +1499,7 @@ private func resolveMissingPeerChatInfos(network: Network, state: AccountMutable
                     
                     for dialog in dialogs {
                         switch dialog {
-                            case let .dialog(_, peer, topMessage, readInboxMaxId, readOutboxMaxId, unreadCount, unreadMentionsCount, notifySettings, pts, draft, folderId):
+                            case let .dialog(_, peer, topMessage, readInboxMaxId, readOutboxMaxId, unreadCount, unreadMentionsCount, notifySettings, pts, _, folderId):
                                 let peerId = peer.peerId
                                 
                                 updatedState.setNeedsHoleFromPreviousState(peerId: peerId, namespace: Namespaces.Message.Cloud)
@@ -2040,7 +2051,7 @@ private func optimizedOperations(_ operations: [AccountStateMutationOperation]) 
     var currentAddScheduledMessages: OptimizeAddMessagesState?
     for operation in operations {
         switch operation {
-            case .DeleteMessages, .DeleteMessagesWithGlobalIds, .EditMessage, .UpdateMessagePoll/*, .UpdateMessageReactions*/, .UpdateMedia, .MergeApiChats, .MergeApiUsers, .MergePeerPresences, .UpdatePeer, .ReadInbox, .ReadOutbox, .ReadGroupFeedInbox, .ResetReadState, .ResetIncomingReadState, .UpdatePeerChatUnreadMark, .ResetMessageTagSummary, .UpdateNotificationSettings, .UpdateGlobalNotificationSettings, .UpdateSecretChat, .AddSecretMessages, .ReadSecretOutbox, .AddPeerInputActivity, .UpdateCachedPeerData, .UpdatePinnedItemIds, .ReadMessageContents, .UpdateMessageImpressionCount, .UpdateInstalledStickerPacks, .UpdateRecentGifs, .UpdateChatInputState, .UpdateCall, .UpdateLangPack, .UpdateMinAvailableMessage, .UpdateIsContact, .UpdatePeerChatInclusion, .UpdatePeersNearby, .UpdateTheme:
+            case .DeleteMessages, .DeleteMessagesWithGlobalIds, .EditMessage, .UpdateMessagePoll/*, .UpdateMessageReactions*/, .UpdateMedia, .MergeApiChats, .MergeApiUsers, .MergePeerPresences, .UpdatePeer, .ReadInbox, .ReadOutbox, .ReadGroupFeedInbox, .ResetReadState, .ResetIncomingReadState, .UpdatePeerChatUnreadMark, .ResetMessageTagSummary, .UpdateNotificationSettings, .UpdateGlobalNotificationSettings, .UpdateSecretChat, .AddSecretMessages, .ReadSecretOutbox, .AddPeerInputActivity, .UpdateCachedPeerData, .UpdatePinnedItemIds, .ReadMessageContents, .UpdateMessageImpressionCount, .UpdateInstalledStickerPacks, .UpdateRecentGifs, .UpdateChatInputState, .UpdateCall, .UpdateLangPack, .UpdateMinAvailableMessage, .UpdateIsContact, .UpdatePeerChatInclusion, .UpdatePeersNearby, .UpdateTheme, .SyncChatListFilters, .UpdateChatListFilter, .UpdateChatListFilterOrder:
                 if let currentAddMessages = currentAddMessages, !currentAddMessages.messages.isEmpty {
                     result.append(.AddMessages(currentAddMessages.messages, currentAddMessages.location))
                 }
@@ -2124,6 +2135,7 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
     var updatedThemes: [Int64: TelegramTheme] = [:]
     var delayNotificatonsUntil: Int32?
     var peerActivityTimestamps: [PeerId: Int32] = [:]
+    var syncChatListFilters = false
     
     var holesFromPreviousStateMessageIds: [MessageId] = []
     
@@ -2688,6 +2700,46 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                 updatedPeersNearby = peersNearby
             case let .UpdateTheme(theme):
                 updatedThemes[theme.id] = theme
+            case .SyncChatListFilters:
+                syncChatListFilters = true
+            case let .UpdateChatListFilterOrder(order):
+                if !syncChatListFilters {
+                    let _ = updateChatListFiltersState(transaction: transaction, { state in
+                        var state = state
+                        if Set(state.filters.map { $0.id }) == Set(order) {
+                            var updatedFilters: [ChatListFilter] = []
+                            for id in order {
+                                if let filter = state.filters.first(where: { $0.id == id }) {
+                                    updatedFilters.append(filter)
+                                } else {
+                                    assertionFailure()
+                                }
+                            }
+                            state.filters = updatedFilters
+                            state.remoteFilters = state.filters
+                        } else {
+                            syncChatListFilters = true
+                        }
+                        return state
+                    })
+                }
+            case let .UpdateChatListFilter(id, filter):
+                if !syncChatListFilters {
+                    let _ = updateChatListFiltersState(transaction: transaction, { state in
+                        var state = state
+                        if let index = state.filters.firstIndex(where: { $0.id == id }) {
+                            if let filter = filter {
+                                state.filters[index] = ChatListFilter(apiFilter: filter)
+                            } else {
+                                state.filters.remove(at: index)
+                            }
+                            state.remoteFilters = state.filters
+                        } else {
+                            syncChatListFilters = true
+                        }
+                        return state
+                    })
+                }
         }
     }
     
@@ -2906,7 +2958,9 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                     let currentInclusion = transaction.getPeerChatListInclusion(peerId)
                     if let groupId = currentInclusion.groupId, groupId == Namespaces.PeerGroup.archive {
                         if let peer = transaction.getPeer(peerId) as? TelegramSecretChat {
-                            if let notificationSettings = transaction.getPeerNotificationSettings(peer.regularPeerId) as? TelegramPeerNotificationSettings, !notificationSettings.isRemovedFromTotalUnreadCount {
+                            let isRemovedFromTotalUnreadCount = resolvedIsRemovedFromTotalUnreadCount(globalSettings: transaction.getGlobalNotificationSettings(), peer: peer, peerSettings: transaction.getPeerNotificationSettings(peer.regularPeerId))
+                            
+                            if !isRemovedFromTotalUnreadCount {
                                 transaction.updatePeerChatListInclusion(peerId, inclusion: currentInclusion.withGroupId(groupId: .root))
                             }
                         }
@@ -3006,6 +3060,10 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
             let messageId = MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: messageIdValue)
             deleteMessagesInteractively(transaction: transaction, stateManager: nil, postbox: postbox, messageIds: [messageId], type: .forEveryone, deleteAllInGroup: false, removeIfPossiblyDelivered: false)
         }
+    }
+    
+    if syncChatListFilters {
+        requestChatListFiltersSync(transaction: transaction)
     }
     
     return AccountReplayedFinalState(state: finalState, addedIncomingMessageIds: addedIncomingMessageIds, wasScheduledMessageIds: wasScheduledMessageIds, addedSecretMessageIds: addedSecretMessageIds, updatedTypingActivities: updatedTypingActivities, updatedWebpages: updatedWebpages, updatedCalls: updatedCalls, updatedPeersNearby: updatedPeersNearby, isContactUpdates: isContactUpdates, delayNotificatonsUntil: delayNotificatonsUntil)
