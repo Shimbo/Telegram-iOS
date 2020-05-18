@@ -208,9 +208,9 @@ private final class LoadingShimmerNode: ASDisplayNode {
 public struct ItemListPeerItemEditing: Equatable {
     public var editable: Bool
     public var editing: Bool
-    public var revealed: Bool
+    public var revealed: Bool?
     
-    public init(editable: Bool, editing: Bool, revealed: Bool) {
+    public init(editable: Bool, editing: Bool, revealed: Bool?) {
         self.editable = editable
         self.editing = editing
         self.revealed = revealed
@@ -334,8 +334,10 @@ public final class ItemListPeerItem: ListViewItem, ItemListItem {
     public let tag: ItemListItemTag?
     let header: ListViewItemHeader?
     let shimmering: ItemListPeerItemShimmering?
+    let displayDecorations: Bool
+    let disableInteractiveTransitionIfNecessary: Bool
     
-    public init(presentationData: ItemListPresentationData, dateTimeFormat: PresentationDateTimeFormat, nameDisplayOrder: PresentationPersonNameOrder, context: AccountContext, peer: Peer, height: ItemListPeerItemHeight = .peerList, aliasHandling: ItemListPeerItemAliasHandling = .standard, nameColor: ItemListPeerItemNameColor = .primary, nameStyle: ItemListPeerItemNameStyle = .distinctBold, presence: PeerPresence?, text: ItemListPeerItemText, label: ItemListPeerItemLabel, editing: ItemListPeerItemEditing, revealOptions: ItemListPeerItemRevealOptions? = nil, switchValue: ItemListPeerItemSwitch?, enabled: Bool, selectable: Bool, sectionId: ItemListSectionId, action: (() -> Void)?, setPeerIdWithRevealedOptions: @escaping (PeerId?, PeerId?) -> Void, removePeer: @escaping (PeerId) -> Void, toggleUpdated: ((Bool) -> Void)? = nil, contextAction: ((ASDisplayNode, ContextGesture?) -> Void)? = nil, hasTopStripe: Bool = true, hasTopGroupInset: Bool = true, noInsets: Bool = false, tag: ItemListItemTag? = nil, header: ListViewItemHeader? = nil, shimmering: ItemListPeerItemShimmering? = nil) {
+    public init(presentationData: ItemListPresentationData, dateTimeFormat: PresentationDateTimeFormat, nameDisplayOrder: PresentationPersonNameOrder, context: AccountContext, peer: Peer, height: ItemListPeerItemHeight = .peerList, aliasHandling: ItemListPeerItemAliasHandling = .standard, nameColor: ItemListPeerItemNameColor = .primary, nameStyle: ItemListPeerItemNameStyle = .distinctBold, presence: PeerPresence?, text: ItemListPeerItemText, label: ItemListPeerItemLabel, editing: ItemListPeerItemEditing, revealOptions: ItemListPeerItemRevealOptions? = nil, switchValue: ItemListPeerItemSwitch?, enabled: Bool, selectable: Bool, sectionId: ItemListSectionId, action: (() -> Void)?, setPeerIdWithRevealedOptions: @escaping (PeerId?, PeerId?) -> Void, removePeer: @escaping (PeerId) -> Void, toggleUpdated: ((Bool) -> Void)? = nil, contextAction: ((ASDisplayNode, ContextGesture?) -> Void)? = nil, hasTopStripe: Bool = true, hasTopGroupInset: Bool = true, noInsets: Bool = false, tag: ItemListItemTag? = nil, header: ListViewItemHeader? = nil, shimmering: ItemListPeerItemShimmering? = nil, displayDecorations: Bool = true, disableInteractiveTransitionIfNecessary: Bool = false) {
         self.presentationData = presentationData
         self.dateTimeFormat = dateTimeFormat
         self.nameDisplayOrder = nameDisplayOrder
@@ -365,6 +367,8 @@ public final class ItemListPeerItem: ListViewItem, ItemListItem {
         self.tag = tag
         self.header = header
         self.shimmering = shimmering
+        self.displayDecorations = displayDecorations
+        self.disableInteractiveTransitionIfNecessary = disableInteractiveTransitionIfNecessary
     }
     
     public func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, previousItem: ListViewItem?, nextItem: ListViewItem?, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
@@ -424,7 +428,7 @@ public final class ItemListPeerItem: ListViewItem, ItemListItem {
     }
 }
 
-private let avatarFont = avatarPlaceholderFont(size: 15.0)
+private let avatarFont = avatarPlaceholderFont(size: floor(40.0 * 16.0 / 37.0))
 private let badgeFont = Font.regular(15.0)
 
 public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNode {
@@ -525,12 +529,26 @@ public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNo
             }
         })
         
-        self.containerNode.activated = { [weak self] gesture in
+        self.containerNode.activated = { [weak self] gesture, _ in
             guard let strongSelf = self, let item = strongSelf.layoutParams?.0, let contextAction = item.contextAction else {
                 gesture.cancel()
                 return
             }
             contextAction(strongSelf.containerNode, gesture)
+        }
+    }
+    
+    override public func didLoad() {
+        super.didLoad()
+        
+        self.updateEnableGestures()
+    }
+    
+    private func updateEnableGestures() {
+        if let item = self.layoutParams?.0, item.disableInteractiveTransitionIfNecessary, let revealOptions = item.revealOptions, !revealOptions.options.isEmpty {
+            self.view.disablesInteractiveTransitionGestureRecognizer = true
+        } else {
+            self.view.disablesInteractiveTransitionGestureRecognizer = false
         }
     }
     
@@ -932,7 +950,7 @@ public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNo
                         strongSelf.topStripeNode.isHidden = true
                     default:
                         hasTopCorners = true
-                        strongSelf.topStripeNode.isHidden = hasCorners || !item.hasTopStripe
+                        strongSelf.topStripeNode.isHidden = !item.displayDecorations || hasCorners || !item.hasTopStripe
                     }
                     let bottomStripeInset: CGFloat
                     let bottomStripeOffset: CGFloat
@@ -944,7 +962,7 @@ public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNo
                         bottomStripeInset = 0.0
                         bottomStripeOffset = 0.0
                         hasBottomCorners = true
-                        strongSelf.bottomStripeNode.isHidden = hasCorners
+                        strongSelf.bottomStripeNode.isHidden = hasCorners || !item.displayDecorations
                     }
                     
                     strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.presentationData.theme, top: hasTopCorners, bottom: hasBottomCorners) : nil
@@ -1087,10 +1105,15 @@ public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNo
                         shimmerNode.removeFromSupernode()
                     }
                     
+                    strongSelf.backgroundNode.isHidden = !item.displayDecorations
+                    strongSelf.highlightedBackgroundNode.isHidden = !item.displayDecorations
+                    
                     strongSelf.updateLayout(size: layout.contentSize, leftInset: params.leftInset, rightInset: params.rightInset)
                     
                     strongSelf.setRevealOptions((left: [], right: peerRevealOptions))
-                    strongSelf.setRevealOptionsOpened(item.editing.revealed, animated: animated)
+                    if let revealed = item.editing.revealed {
+                        strongSelf.setRevealOptionsOpened(revealed, animated: animated)
+                    }
                 }
             })
         }

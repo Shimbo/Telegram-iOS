@@ -48,8 +48,10 @@ extension Notification.Name {
 }
 
 public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
-    public static let baseApiUrl = "https://api.circles.is/"
-    public static let baseDevApiUrl = "https://api.dev.randomcoffee.us/"
+    public static let lockedGroupFlagMask: Int32 = 1
+    public static let proGroupFlagMask: Int32 = 2
+    public static let baseApiUrl = "https://api.peerboard.org/"
+    public static let baseDevApiUrl = "https://api.peerboard.dev/"
     
     public static let botName:String = "@TelefrostConciergeBot"
     public static let botNameDev:String = "@TelefrostDevBot"
@@ -60,6 +62,9 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     struct ApiCircle {
         let id: PeerGroupId
         let name: String
+        let role: Int32?
+        let tier: String?
+        let settingsURL: String?
         var peers: [PeerId]
         var index: Int
     }
@@ -113,6 +118,8 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                 newValue.token = old.token
                 newValue.remoteInclusions = old.remoteInclusions
                 newValue.groupNames = old.groupNames
+                newValue.groupSettingsURLs = old.groupSettingsURLs
+                newValue.groupFlags = old.groupFlags
                 newValue.index = old.index
                 newValue.currentCircle = old.currentCircle
                 newValue.lastCirclePeer = old.lastCirclePeer
@@ -170,9 +177,24 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                                             case let .array(peers) = circle["peers"],
                                             case let .array(members) = circle["members"] {
                                             
+                                            var settingsURL: String? = nil
+                                            if case let .string(settingsUrlTmp) = circle["settings_url"] {
+                                                settingsURL = settingsUrlTmp
+                                            }
+                                            
+                                            var role: Int32? = nil
+                                            if case let .number(roleTmp) = circle["role"] {
+                                                role = Int32(roleTmp)
+                                            }
+                                            
+                                            var tier: String? = nil
+                                            if case let .string(tierTmp) = circle["tier"] {
+                                                tier = tierTmp
+                                            }
+                                            
                                             apiCircles.append(ApiCircle(
                                                 id: PeerGroupId(rawValue: Int32(id)),
-                                                name: name,
+                                                name: name, role: role, tier: tier, settingsURL: settingsURL,
                                                 peers: (peers+members).compactMap { p -> PeerId? in
                                                     if case let .number(id) = p {
                                                         return parseBotApiPeerId(Int64(id))
@@ -214,6 +236,10 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                             for c in circles {
                                 entry.index[c.id] = Int32(c.index)
                                 entry.groupNames[c.id] = c.name
+                                entry.groupSettingsURLs[c.id] = c.settingsURL
+                                entry.groupFlags[c.id] =
+                                    (c.role != 1 ? lockedGroupFlagMask : 0) |
+                                    ((c.tier ?? "").compare("paid", options: NSString.CompareOptions.caseInsensitive) == .orderedSame ? proGroupFlagMask : 0)
                                 for peer in c.peers {
                                     if peer != userId {
                                         entry.remoteInclusions[peer] = c.id
@@ -743,6 +769,8 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     
     public var token: String?
     public var groupNames: Dictionary<PeerGroupId, String> = [:]
+    public var groupSettingsURLs: Dictionary<PeerGroupId, String> = [:]
+    public var groupFlags: Dictionary<PeerGroupId, Int32> = [:]
     public var remoteInclusions: Dictionary<PeerId, PeerGroupId> = [:]
     public var dev: Bool
     public var index: Dictionary<PeerGroupId, Int32> = [:]
@@ -796,6 +824,18 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                 PeerGroupId(rawValue: $0.decodeInt32ForKey("k", orElse: 0))    
             }
         )
+        self.groupSettingsURLs = decoder.decodeObjectDictionaryForKey(
+            "gsu",
+            keyDecoder: {
+                PeerGroupId(rawValue: $0.decodeInt32ForKey("k", orElse: 0))
+            }
+        )
+        self.groupFlags = decoder.decodeObjectDictionaryForKey(
+            "gfl",
+            keyDecoder: {
+                PeerGroupId(rawValue: $0.decodeInt32ForKey("k", orElse: 0))
+            }
+        )
         self.remoteInclusions = decoder.decodeObjectDictionaryForKey(
             "ri",
             keyDecoder: {
@@ -827,6 +867,12 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
         encoder.encodeObjectDictionary(self.groupNames , forKey: "gn", keyEncoder: {
             $1.encodeInt32($0.rawValue, forKey: "k")
         })
+        encoder.encodeObjectDictionary(self.groupSettingsURLs , forKey: "gsu", keyEncoder: {
+            $1.encodeInt32($0.rawValue, forKey: "k")
+        })
+        encoder.encodeObjectDictionary(self.groupFlags , forKey: "gfl", keyEncoder: {
+            $1.encodeInt32($0.rawValue, forKey: "k")
+        })
         encoder.encodeObjectDictionary(self.index , forKey: "i", keyEncoder: {
             $1.encodeInt32($0.rawValue, forKey: "k")
         })
@@ -852,7 +898,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     }
     
     public static func == (lhs: Circles, rhs: Circles) -> Bool {
-        return lhs.token == rhs.token && lhs.dev == rhs.dev && lhs.groupNames == rhs.groupNames && lhs.remoteInclusions == rhs.remoteInclusions && lhs.index == rhs.index && lhs.lastCirclePeer == rhs.lastCirclePeer && lhs.currentCircle == rhs.currentCircle
+        return lhs.token == rhs.token && lhs.dev == rhs.dev && lhs.groupNames == rhs.groupNames && lhs.groupSettingsURLs == rhs.groupSettingsURLs && lhs.groupFlags == rhs.groupFlags && lhs.remoteInclusions == rhs.remoteInclusions && lhs.index == rhs.index && lhs.lastCirclePeer == rhs.lastCirclePeer && lhs.currentCircle == rhs.currentCircle
     }
 }
 

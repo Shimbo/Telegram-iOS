@@ -199,20 +199,24 @@ final class PeerNotificationSettingsTable: Table {
         var added = Set<PeerId>()
         var removed = Set<PeerId>()
         
+        var globalNotificationSettings: PostboxGlobalNotificationSettings?
+        
         for (peerId, initialSettings) in self.updatedInitialSettings {
             guard let peer = postbox.peerTable.get(peerId) else {
                 continue
             }
-            var wasParticipating = false
-            let include = shouldPeerParticipateInUnreadCountStats(peer: peer)
             
-            if include, let initialEffective = initialSettings.effective {
-                wasParticipating = !initialEffective.isRemovedFromTotalUnreadCount
+            let globalNotificationSettingsValue: PostboxGlobalNotificationSettings
+            if let current = globalNotificationSettings {
+                globalNotificationSettingsValue = current
+            } else {
+                globalNotificationSettingsValue = postbox.getGlobalNotificationSettings()
+                globalNotificationSettings = globalNotificationSettingsValue
             }
-            var isParticipating = false
-            if include, let resultEffective = self.cachedSettings[peerId]?.effective {
-                isParticipating = !resultEffective.isRemovedFromTotalUnreadCount
-            }
+            
+            let wasParticipating = !resolvedIsRemovedFromTotalUnreadCount(globalSettings: globalNotificationSettingsValue, peer: peer, peerSettings: initialSettings.effective)
+            let isParticipating = !resolvedIsRemovedFromTotalUnreadCount(globalSettings: globalNotificationSettingsValue, peer: peer, peerSettings: self.cachedSettings[peerId]?.effective)
+            
             if wasParticipating != isParticipating {
                 if isParticipating {
                     added.insert(peerId)
@@ -225,7 +229,7 @@ final class PeerNotificationSettingsTable: Table {
         return (added, removed)
     }
     
-    func resetAll(to settings: PeerNotificationSettings, updatedSettings: inout Set<PeerId>, updatedTimestamps: inout [PeerId: PeerNotificationSettingsBehaviorTimestamp]) -> [PeerId] {
+    func resetAll(to settings: PeerNotificationSettings, updatedSettings: inout Set<PeerId>, updatedTimestamps: inout [PeerId: PeerNotificationSettingsBehaviorTimestamp]) -> [PeerId: PeerNotificationSettings?] {
         let lowerBound = ValueBoxKey(length: 8)
         lowerBound.setInt64(0, value: 0)
         let upperBound = ValueBoxKey(length: 8)
@@ -236,17 +240,17 @@ final class PeerNotificationSettingsTable: Table {
             return true
         }, limit: 0)
         
-        var updatedPeerIds: [PeerId] = []
+        var updatedPeers: [PeerId: PeerNotificationSettings?] = [:]
         for peerId in peerIds {
             let entry = self.getEntry(peerId)
             if let current = entry.current, !current.isEqual(to: settings) || entry.pending != nil {
                 let _ = self.setCurrent(id: peerId, settings: settings, updatedTimestamps: &updatedTimestamps)
                 let _ = self.setPending(id: peerId, settings: nil, updatedSettings: &updatedSettings)
-                updatedPeerIds.append(peerId)
+                updatedPeers[peerId] = entry.effective
             }
         }
         
-        return updatedPeerIds
+        return updatedPeers
     }
     
     override func beforeCommit() {

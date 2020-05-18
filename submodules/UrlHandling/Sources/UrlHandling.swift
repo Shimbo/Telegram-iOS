@@ -4,15 +4,15 @@ import SwiftSignalKit
 import Postbox
 import TelegramCore
 import SyncCore
-#if BUCK
 import MtProtoKit
-#else
-import MtProtoKitDynamic
-#endif
 import TelegramPresentationData
 import TelegramUIPreferences
 import AccountContext
+#if ENABLE_WALLET
 import WalletUrl
+#endif
+
+private let baseTelegramMePaths = ["telegram.me", "t.me", "telegram.dog"]
 
 public enum ParsedInternalPeerUrlParameter {
     case botStart(String)
@@ -346,7 +346,6 @@ private func resolveInternalUrl(account: Account, url: ParsedInternalUrl) -> Sig
 
 public func isTelegramMeLink(_ url: String) -> Bool {
     let schemes = ["http://", "https://", ""]
-    let baseTelegramMePaths = ["telegram.me", "t.me"]
     for basePath in baseTelegramMePaths {
         for scheme in schemes {
             let basePrefix = scheme + basePath + "/"
@@ -360,7 +359,6 @@ public func isTelegramMeLink(_ url: String) -> Bool {
 
 public func parseProxyUrl(_ url: String) -> (host: String, port: Int32, username: String?, password: String?, secret: Data?)? {
     let schemes = ["http://", "https://", ""]
-    let baseTelegramMePaths = ["telegram.me", "t.me"]
     for basePath in baseTelegramMePaths {
         for scheme in schemes {
             let basePrefix = scheme + basePath + "/"
@@ -382,7 +380,6 @@ public func parseProxyUrl(_ url: String) -> (host: String, port: Int32, username
 
 public func parseStickerPackUrl(_ url: String) -> String? {
     let schemes = ["http://", "https://", ""]
-    let baseTelegramMePaths = ["telegram.me", "t.me"]
     for basePath in baseTelegramMePaths {
         for scheme in schemes {
             let basePrefix = scheme + basePath + "/"
@@ -404,7 +401,6 @@ public func parseStickerPackUrl(_ url: String) -> String? {
 
 public func parseWallpaperUrl(_ url: String) -> WallpaperUrlParameter? {
     let schemes = ["http://", "https://", ""]
-    let baseTelegramMePaths = ["telegram.me", "t.me"]
     for basePath in baseTelegramMePaths {
         for scheme in schemes {
             let basePrefix = scheme + basePath + "/"
@@ -425,13 +421,14 @@ public func parseWallpaperUrl(_ url: String) -> WallpaperUrlParameter? {
 }
 
 public func resolveUrlImpl(account: Account, url: String) -> Signal<ResolvedUrl, NoError> {
+    #if ENABLE_WALLET
     if url.hasPrefix("ton://") {
         if let url = URL(string: url), let parsedUrl = parseWalletUrl(url) {
             return .single(.wallet(address: parsedUrl.address, amount: parsedUrl.amount, comment: parsedUrl.comment))
         }
     }
+    #endif
     let schemes = ["http://", "https://", ""]
-    let baseTelegramMePaths = ["telegram.me", "t.me"]
     for basePath in baseTelegramMePaths {
         for scheme in schemes {
             let basePrefix = scheme + basePath + "/"

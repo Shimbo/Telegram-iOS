@@ -48,8 +48,8 @@ resource_dependencies = [
     "//submodules/LegacyComponents:LegacyComponentsResources",
     "//submodules/TelegramUI:TelegramUIAssets",
     "//submodules/TelegramUI:TelegramUIResources",
-    "//submodules/WalletUI:WalletUIAssets",
-    "//submodules/WalletUI:WalletUIResources",
+    #"//submodules/WalletUI:WalletUIAssets",
+    #"//submodules/WalletUI:WalletUIResources",
     "//submodules/PasswordSetupUI:PasswordSetupUIResources",
     "//submodules/PasswordSetupUI:PasswordSetupUIAssets",
     "//submodules/OverlayStatusController:OverlayStatusControllerResources",
@@ -402,6 +402,7 @@ apple_binary(
         "//submodules/TelegramCore:TelegramCore#shared",
         "//submodules/BuildConfig:BuildConfig",
         "//submodules/OpenSSLEncryptionProvider:OpenSSLEncryptionProvider",
+        "//submodules/AppLockState:AppLockState",
     ],
     frameworks = [
         "$SDKROOT/System/Library/Frameworks/Foundation.framework",

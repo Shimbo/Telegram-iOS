@@ -1,9 +1,5 @@
 import Foundation
 
-func shouldPeerParticipateInUnreadCountStats(peer: Peer) -> Bool {
-    return true
-}
-
 struct ChatListPeerInclusionIndex {
     let topMessageIndex: MessageIndex?
     let inclusion: PeerChatListInclusion
@@ -175,18 +171,18 @@ final class ChatListIndexTable: Table {
         assert(self.updatedPreviousPeerCachedIndices.isEmpty)
     }
     
-    func commitWithTransaction(postbox: Postbox, alteredInitialPeerCombinedReadStates: [PeerId: CombinedPeerReadState], updatedPeers: [(Peer?, Peer)], transactionParticipationInTotalUnreadCountUpdates: (added: Set<PeerId>, removed: Set<PeerId>), updatedRootUnreadState: inout ChatListTotalUnreadState?, updatedGroupTotalUnreadSummaries: inout [PeerGroupId: PeerGroupUnreadCountersCombinedSummary], currentUpdatedGroupSummarySynchronizeOperations: inout [PeerGroupAndNamespace: Bool]) {
+    func commitWithTransaction(postbox: Postbox, alteredInitialPeerCombinedReadStates: [PeerId: CombinedPeerReadState], updatedPeers: [((Peer, Bool)?, (Peer, Bool))], transactionParticipationInTotalUnreadCountUpdates: (added: Set<PeerId>, removed: Set<PeerId>), updatedTotalUnreadStates: inout [PeerGroupId: ChatListTotalUnreadState], updatedGroupTotalUnreadSummaries: inout [PeerGroupId: PeerGroupUnreadCountersCombinedSummary], currentUpdatedGroupSummarySynchronizeOperations: inout [PeerGroupAndNamespace: Bool]) {
         var updatedPeerTags: [PeerId: (previous: PeerSummaryCounterTags, updated: PeerSummaryCounterTags)] = [:]
         for (previous, updated) in updatedPeers {
             let previousTags: PeerSummaryCounterTags
-            if let previous = previous {
-                previousTags = postbox.seedConfiguration.peerSummaryCounterTags(previous)
+            if let (previous, previousIsContact) = previous {
+                previousTags = postbox.seedConfiguration.peerSummaryCounterTags(previous, previousIsContact)
             } else {
                 previousTags = []
             }
-            let updatedTags = postbox.seedConfiguration.peerSummaryCounterTags(updated)
+            let updatedTags = postbox.seedConfiguration.peerSummaryCounterTags(updated.0, updated.1)
             if previousTags != updatedTags {
-                updatedPeerTags[updated.id] = (previousTags, updatedTags)
+                updatedPeerTags[updated.0.id] = (previousTags, updatedTags)
             }
         }
         
@@ -361,7 +357,7 @@ final class ChatListIndexTable: Table {
                 let updatedCountFiltered = updatedStateFiltered?.count ?? 0               
                 
                 if prevFilteredUnread != updatedFilteredUnread {
-                    if prevUnread {
+                    if prevFilteredUnread {
                         summary.filtered.chatCount -= 1
                     } else {
                         summary.filtered.chatCount += 1
@@ -383,13 +379,16 @@ final class ChatListIndexTable: Table {
                 }
             }
             
-            var updatedRootState: ChatListTotalUnreadState?
+            var updatedTotalStates: [PeerGroupId: ChatListTotalUnreadState] = [:]
             var updatedTotalUnreadSummaries: [PeerGroupId: PeerGroupUnreadCountersCombinedSummary] = [:]
+            
+            let globalNotificationSettings = postbox.getGlobalNotificationSettings()
             
             for peerId in alteredPeerIds {
                 guard let peer = postbox.peerTable.get(peerId) else {
                     continue
                 }
+                let isContact = postbox.contactsTable.isContact(peerId: peerId)
                 let notificationPeerId: PeerId = peer.associatedPeerId ?? peerId
                 let initialReadState = alteredInitialPeerCombinedReadStates[peerId] ?? postbox.readStateTable.getCombinedState(peerId)
                 let currentReadState = postbox.readStateTable.getCombinedState(peerId)
@@ -410,19 +409,23 @@ final class ChatListIndexTable: Table {
                 }
                 
                 for groupId in groupIds {
-                    var totalRootUnreadState: ChatListTotalUnreadState?
+                    let totalGroupId = groupId == PeerGroupId(rawValue: 1) ? groupId : .root
+                    var totalGroupUnreadState: ChatListTotalUnreadState
                     var summary: PeerGroupUnreadCountersCombinedSummary
-                    var summaryFiltered: PeerGroupUnreadCountersCombinedSummary
-                    if groupId != PeerGroupId(rawValue: 1) {
-                        if let current = updatedRootState {
-                            var prev = postbox.messageHistoryMetadataTable.getChatListTotalUnreadState()
+                    if totalGroupId != PeerGroupId(rawValue: 1) {
+                        if let current = updatedTotalStates[totalGroupId] {
+                            var prev = postbox.messageHistoryMetadataTable.getTotalUnreadState(groupId: totalGroupId)
                             prev.absoluteCounters.merge(current.absoluteCounters) { (_, new) in new }
                             prev.filteredCounters.merge(current.filteredCounters) { (_, new) in new }
-                            totalRootUnreadState = prev
-                            //totalRootUnreadState = current
+                            updatedTotalStates[totalGroupId] = prev
                         } else {
-                            totalRootUnreadState = postbox.messageHistoryMetadataTable.getChatListTotalUnreadState()
+                            updatedTotalStates[totalGroupId] = postbox.messageHistoryMetadataTable.getTotalUnreadState(groupId: totalGroupId)
                         }
+                    }
+                    if let current = updatedTotalStates[totalGroupId] {
+                        totalGroupUnreadState = current
+                    } else {
+                        totalGroupUnreadState = postbox.messageHistoryMetadataTable.getTotalUnreadState(groupId: totalGroupId)
                     }
                     if let current = updatedTotalUnreadSummaries[groupId] {
                         summary = current
@@ -472,8 +475,9 @@ final class ChatListIndexTable: Table {
                         currentFilteredValue = (0, false, false)
                         currentFilteredStates = CombinedPeerReadState(states: [])
                     } else {
-                        if let notificationSettings = postbox.peerNotificationSettingsTable.getEffective(notificationPeerId), !notificationSettings.isRemovedFromTotalUnreadCount {
-                        } else {
+                        let isRemovedFromTotalUnreadCount = resolvedIsRemovedFromTotalUnreadCount(globalSettings: globalNotificationSettings, peer: peer, peerSettings: postbox.peerNotificationSettingsTable.getEffective(notificationPeerId))
+                        
+                        if isRemovedFromTotalUnreadCount {
                             initialFilteredValue = (0, false, false)
                             currentFilteredValue = (0, false, false)
                             initialFilteredStates = CombinedPeerReadState(states: [])
@@ -481,93 +485,91 @@ final class ChatListIndexTable: Table {
                         }
                     }
                     
-                    if var currentTotalRootUnreadState = totalRootUnreadState {
-                        var keptTags: PeerSummaryCounterTags = postbox.seedConfiguration.peerSummaryCounterTags(peer)
-                        if let (removedTags, addedTags) = updatedPeerTags[peerId] {
-                            keptTags.remove(removedTags)
-                            keptTags.remove(addedTags)
-                            
-                            for tag in removedTags {
-                                alterTags(&currentTotalRootUnreadState, peerId, tag, { absolute, filtered in
-                                    var absolute = absolute
-                                    var filtered = filtered
-                                    absolute.messageCount -= initialValue.0
-                                    if initialValue.1 {
-                                        absolute.chatCount -= 1
-                                    }
-                                    if initialValue.2 && initialValue.0 == 0 {
-                                        absolute.messageCount -= 1
-                                    }
-                                    filtered.messageCount -= initialFilteredValue.0
-                                    if initialFilteredValue.1 {
-                                        filtered.chatCount -= 1
-                                    }
-                                    if initialFilteredValue.2 && initialFilteredValue.0 == 0 {
-                                        filtered.messageCount -= 1
-                                    }
-                                    return (absolute, filtered)
-                                })
-                            }
-                            for tag in addedTags {
-                                alterTags(&currentTotalRootUnreadState, peerId, tag, { absolute, filtered in
-                                    var absolute = absolute
-                                    var filtered = filtered
-                                    absolute.messageCount += currentValue.0
-                                    if currentValue.2 && currentValue.0 == 0 {
-                                        absolute.messageCount += 1
-                                    }
-                                    if currentValue.1 {
-                                        absolute.chatCount += 1
-                                    }
-                                    filtered.messageCount += currentFilteredValue.0
-                                    if currentFilteredValue.1 {
-                                        filtered.chatCount += 1
-                                    }
-                                    if currentFilteredValue.2 && currentFilteredValue.0 == 0 {
-                                        filtered.messageCount += 1
-                                    }
-                                    return (absolute, filtered)
-                                })
-                            }
-                        }
+                    var keptTags: PeerSummaryCounterTags = postbox.seedConfiguration.peerSummaryCounterTags(peer, isContact)
+                    if let (removedTags, addedTags) = updatedPeerTags[peerId] {
+                        keptTags.remove(removedTags)
+                        keptTags.remove(addedTags)
                         
-                        for tag in keptTags {
-                            alterTags(&currentTotalRootUnreadState, peerId, tag, { absolute, filtered in
+                        for tag in removedTags {
+                            alterTags(&totalGroupUnreadState, peerId, tag, { absolute, filtered in
                                 var absolute = absolute
                                 var filtered = filtered
-                                
-                                let chatDifference: Int32
-                                if initialValue.1 != currentValue.1 {
-                                    chatDifference = initialValue.1 ? -1 : 1
-                                } else {
-                                    chatDifference = 0
+                                absolute.messageCount -= initialValue.0
+                                if initialValue.1 {
+                                    absolute.chatCount -= 1
                                 }
-                                
-                                let currentUnreadMark: Int32 = currentValue.2 ? 1 : 0
-                                let initialUnreadMark: Int32 = initialValue.2 ? 1 : 0
-                                let messageDifference = max(currentValue.0, currentUnreadMark) - max(initialValue.0, initialUnreadMark)
-                                
-                                let chatFilteredDifference: Int32
-                                if initialFilteredValue.1 != currentFilteredValue.1 {
-                                    chatFilteredDifference = initialFilteredValue.1 ? -1 : 1
-                                } else {
-                                    chatFilteredDifference = 0
+                                if initialValue.2 && initialValue.0 == 0 {
+                                    absolute.messageCount -= 1
                                 }
-                                let currentFilteredUnreadMark: Int32 = currentFilteredValue.2 ? 1 : 0
-                                let initialFilteredUnreadMark: Int32 = initialFilteredValue.2 ? 1 : 0
-                                let messageFilteredDifference = max(currentFilteredValue.0, currentFilteredUnreadMark) - max(initialFilteredValue.0, initialFilteredUnreadMark)
-                                
-                                absolute.messageCount += messageDifference
-                                absolute.chatCount += chatDifference
-                                filtered.messageCount += messageFilteredDifference
-                                filtered.chatCount += chatFilteredDifference
-                                
+                                filtered.messageCount -= initialFilteredValue.0
+                                if initialFilteredValue.1 {
+                                    filtered.chatCount -= 1
+                                }
+                                if initialFilteredValue.2 && initialFilteredValue.0 == 0 {
+                                    filtered.messageCount -= 1
+                                }
                                 return (absolute, filtered)
                             })
                         }
-                        
-                        updatedRootState = currentTotalRootUnreadState
+                        for tag in addedTags {
+                            alterTags(&totalGroupUnreadState, peerId, tag, { absolute, filtered in
+                                var absolute = absolute
+                                var filtered = filtered
+                                absolute.messageCount += currentValue.0
+                                if currentValue.2 && currentValue.0 == 0 {
+                                    absolute.messageCount += 1
+                                }
+                                if currentValue.1 {
+                                    absolute.chatCount += 1
+                                }
+                                filtered.messageCount += currentFilteredValue.0
+                                if currentFilteredValue.1 {
+                                    filtered.chatCount += 1
+                                }
+                                if currentFilteredValue.2 && currentFilteredValue.0 == 0 {
+                                    filtered.messageCount += 1
+                                }
+                                return (absolute, filtered)
+                            })
+                        }
                     }
+                    
+                    for tag in keptTags {
+                        alterTags(&totalGroupUnreadState, peerId, tag, { absolute, filtered in
+                            var absolute = absolute
+                            var filtered = filtered
+                            
+                            let chatDifference: Int32
+                            if initialValue.1 != currentValue.1 {
+                                chatDifference = initialValue.1 ? -1 : 1
+                            } else {
+                                chatDifference = 0
+                            }
+                            
+                            let currentUnreadMark: Int32 = currentValue.2 ? 1 : 0
+                            let initialUnreadMark: Int32 = initialValue.2 ? 1 : 0
+                            let messageDifference = max(currentValue.0, currentUnreadMark) - max(initialValue.0, initialUnreadMark)
+                            
+                            let chatFilteredDifference: Int32
+                            if initialFilteredValue.1 != currentFilteredValue.1 {
+                                chatFilteredDifference = initialFilteredValue.1 ? -1 : 1
+                            } else {
+                                chatFilteredDifference = 0
+                            }
+                            let currentFilteredUnreadMark: Int32 = currentFilteredValue.2 ? 1 : 0
+                            let initialFilteredUnreadMark: Int32 = initialFilteredValue.2 ? 1 : 0
+                            let messageFilteredDifference = max(currentFilteredValue.0, currentFilteredUnreadMark) - max(initialFilteredValue.0, initialFilteredUnreadMark)
+                            
+                            absolute.messageCount += messageDifference
+                            absolute.chatCount += chatDifference
+                            filtered.messageCount += messageFilteredDifference
+                            filtered.chatCount += chatFilteredDifference
+                            
+                            return (absolute, filtered)
+                        })
+                    }
+                    
+                    updatedTotalStates[totalGroupId] = totalGroupUnreadState
                     
                     var namespaces: [MessageId.Namespace] = []
                     for (namespace, _) in initialStates.states {
@@ -598,10 +600,10 @@ final class ChatListIndexTable: Table {
                 }
             }
             
-            if let updatedRootState = updatedRootState {
-                if postbox.messageHistoryMetadataTable.getChatListTotalUnreadState() != updatedRootState {
-                    postbox.messageHistoryMetadataTable.setChatListTotalUnreadState(updatedRootState)
-                    updatedRootUnreadState = updatedRootState
+            for (groupId, state) in updatedTotalStates {
+                if postbox.messageHistoryMetadataTable.getTotalUnreadState(groupId: groupId) != state {
+                    postbox.messageHistoryMetadataTable.setTotalUnreadState(groupId: groupId, state: state)
+                    updatedTotalUnreadStates[groupId] = state
                 }
             }
             
@@ -618,16 +620,15 @@ final class ChatListIndexTable: Table {
         assert(self.updatedPreviousPeerCachedIndices.isEmpty)
     }
     
-    func debugReindexUnreadCounts(postbox: Postbox) -> (ChatListTotalUnreadState, [PeerGroupId: PeerGroupUnreadCountersCombinedSummary]) {
+    func debugReindexUnreadCounts(postbox: Postbox) -> ([PeerGroupId: ChatListTotalUnreadState], [PeerGroupId: PeerGroupUnreadCountersCombinedSummary]) {
+        let globalNotificationSettings = postbox.getGlobalNotificationSettings()
+        
         var peerIds: [PeerId] = []
-        self.valueBox.scanInt64(self.table, values: { key, _ in
-            let peerId = PeerId(key)
-            if peerId.namespace != Int32.max {
-                peerIds.append(peerId)
-            }
-            return true
-        })
-        var rootState = ChatListTotalUnreadState(absoluteCounters: [:], filteredCounters: [:])
+        for groupId in postbox.chatListTable.existingGroups() + [.root] {
+            let groupPeerIds = postbox.chatListTable.allPeerIds(groupId: groupId)
+            peerIds.append(contentsOf: groupPeerIds)
+        }
+        var totalStates: [PeerGroupId: ChatListTotalUnreadState] = [:]
         var summaries: [PeerGroupId: PeerGroupUnreadCountersCombinedSummary] = [:]
         for peerId in peerIds {
             guard let peer = postbox.peerTable.get(peerId) else {
@@ -636,52 +637,58 @@ final class ChatListIndexTable: Table {
             guard let combinedState = postbox.readStateTable.getCombinedState(peerId) else {
                 continue
             }
+            let isContact = postbox.contactsTable.isContact(peerId: peerId)
             let notificationPeerId: PeerId = peer.associatedPeerId ?? peerId
             let notificationSettings = postbox.peerNotificationSettingsTable.getEffective(notificationPeerId)
             let inclusion = self.get(peerId: peerId)
-            if let (groupId, _) = inclusion.includedIndex(peerId: peerId) {
-                //if case .root = groupId {
-                    let peerMessageCount = combinedState.count
-                    
-                    let summaryTags = postbox.seedConfiguration.peerSummaryCounterTags(peer)
+            if let (peerGroupId, _) = inclusion.includedIndex(peerId: peerId) {
+                let groupId = peerGroupId == PeerGroupId(rawValue: 1) ? peerGroupId : .root
+                if totalStates[groupId] == nil {
+                    totalStates[groupId] = ChatListTotalUnreadState(absoluteCounters: [:], filteredCounters: [:])
+                }
+                
+                let peerMessageCount = combinedState.count
+                
+                let summaryTags = postbox.seedConfiguration.peerSummaryCounterTags(peer, isContact)
+                for tag in summaryTags {
+                    if totalStates[groupId]!.absoluteCounters[tag] == nil {
+                        totalStates[groupId]!.absoluteCounters[tag] = ChatListTotalUnreadCounters(messageCount: 0, chatCount: 0)
+                    }
+                    var messageCount = totalStates[groupId]!.absoluteCounters[tag]!.messageCount
+                    messageCount = messageCount &+ peerMessageCount
+                    if messageCount < 0 {
+                        messageCount = 0
+                    }
+                    if combinedState.isUnread {
+                        totalStates[groupId]!.absoluteCounters[tag]!.chatCount += 1
+                    }
+                    if combinedState.markedUnread {
+                        messageCount = max(1, messageCount)
+                    }
+                    totalStates[groupId]!.absoluteCounters[tag]!.messageCount = messageCount
+                }
+                
+                let isRemovedFromTotalUnreadCount = resolvedIsRemovedFromTotalUnreadCount(globalSettings: globalNotificationSettings, peer: peer, peerSettings: postbox.peerNotificationSettingsTable.getEffective(notificationPeerId))
+                
+                if !isRemovedFromTotalUnreadCount {
                     for tag in summaryTags {
-                        if rootState.absoluteCounters[tag] == nil {
-                            rootState.absoluteCounters[tag] = ChatListTotalUnreadCounters(messageCount: 0, chatCount: 0)
+                        if totalStates[groupId]!.filteredCounters[tag] == nil {
+                            totalStates[groupId]!.filteredCounters[tag] = ChatListTotalUnreadCounters(messageCount: 0, chatCount: 0)
                         }
-                        var messageCount = rootState.absoluteCounters[tag]!.messageCount
+                        var messageCount = totalStates[groupId]!.filteredCounters[tag]!.messageCount
                         messageCount = messageCount &+ peerMessageCount
                         if messageCount < 0 {
                             messageCount = 0
                         }
                         if combinedState.isUnread {
-                            rootState.absoluteCounters[tag]!.chatCount += 1
+                            totalStates[groupId]!.filteredCounters[tag]!.chatCount += 1
                         }
                         if combinedState.markedUnread {
                             messageCount = max(1, messageCount)
                         }
-                        rootState.absoluteCounters[tag]!.messageCount = messageCount
+                        totalStates[groupId]!.filteredCounters[tag]!.messageCount = messageCount
                     }
-                    
-                    if let notificationSettings = notificationSettings, !notificationSettings.isRemovedFromTotalUnreadCount {
-                        for tag in summaryTags {
-                            if rootState.filteredCounters[tag] == nil {
-                                rootState.filteredCounters[tag] = ChatListTotalUnreadCounters(messageCount: 0, chatCount: 0)
-                            }
-                            var messageCount = rootState.filteredCounters[tag]!.messageCount
-                            messageCount = messageCount &+ peerMessageCount
-                            if messageCount < 0 {
-                                messageCount = 0
-                            }
-                            if combinedState.isUnread {
-                                rootState.filteredCounters[tag]!.chatCount += 1
-                            }
-                            if combinedState.markedUnread {
-                                messageCount = max(1, messageCount)
-                            }
-                            rootState.filteredCounters[tag]!.messageCount = messageCount
-                        }
-                    }
-                //}
+                }
                 
                 for (namespace, state) in combinedState.states {
                     if summaries[groupId] == nil {
@@ -698,7 +705,7 @@ final class ChatListIndexTable: Table {
             }
         }
         
-        return (rootState, summaries)
+        return (totalStates, summaries)
     }
     
     func reindexPeerGroupUnreadCounts(postbox: Postbox, groupId: PeerGroupId) -> PeerGroupUnreadCountersCombinedSummary {
@@ -726,13 +733,14 @@ final class ChatListIndexTable: Table {
                         summary.namespaces[namespace]!.all.chatCount += 1
                         summary.namespaces[namespace]!.all.messageCount += state.count
                         
-                        if let settings = notificationSettings, !settings.isRemovedFromTotalUnreadCount {
+                        if let settings = notificationSettings, !settings.isRemovedFromTotalUnreadCount(default: false) {
                             summary.namespaces[namespace]!.filtered.chatCount += 1
                             summary.namespaces[namespace]!.filtered.messageCount += state.count
                         }
-                    } else if state.markedUnread {
+                    }
+                    else if state.markedUnread {
                         summary.namespaces[namespace]!.all.chatCount += 1
-                        if let settings = notificationSettings, !settings.isRemovedFromTotalUnreadCount {
+                        if let settings = notificationSettings, !settings.isRemovedFromTotalUnreadCount(default: false) {
                             summary.namespaces[namespace]!.filtered.chatCount += 1
                         }
                     }

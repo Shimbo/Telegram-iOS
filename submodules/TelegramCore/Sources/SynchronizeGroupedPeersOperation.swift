@@ -6,13 +6,7 @@ import SyncCore
 
 public func updatePeerGroupIdInteractively(postbox: Postbox, peerId: PeerId, groupId: PeerGroupId) -> Signal<Void, NoError> {
     return postbox.transaction { transaction -> Void in
-        var modifiedGroup: PeerGroupId = groupId
-        if let settings = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
-            if let circleId = settings.inclusions[peerId] {
-                modifiedGroup = circleId
-            }
-        }
-        updatePeerGroupIdInteractively(transaction: transaction, peerId: peerId, groupId: modifiedGroup)
+        updatePeerGroupIdInteractively(transaction: transaction, peerId: peerId, groupId: groupId)
     }
 }
 
