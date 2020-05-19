@@ -452,7 +452,7 @@ func initialStateWithDifference(postbox: Postbox, difference: Api.updates.Differ
     }
 }
 
-func finalStateWithUpdateGroups(postbox: Postbox, network: Network, state: AccountMutableState, groups: [UpdateGroup]) -> Signal<AccountFinalState, NoError> {
+func finalStateWithUpdateGroups(postbox: Postbox, network: Network, state: AccountMutableState, groups: [UpdateGroup], accountPeerId: PeerId) -> Signal<AccountFinalState, NoError> {
     var updatedState = state
     
     var hadReset = false
@@ -576,10 +576,10 @@ func finalStateWithUpdateGroups(postbox: Postbox, network: Network, state: Accou
         collectedUpdates.append(Api.Update.updateDeleteChannelMessages(channelId: channelId, messages: [], pts: pts, ptsCount: ptsCount))
     }
     
-    return finalStateWithUpdates(postbox: postbox, network: network, state: updatedState, updates: collectedUpdates, shouldPoll: hadReset, missingUpdates: !ptsUpdatesAfterHole.isEmpty || !qtsUpdatesAfterHole.isEmpty || !seqGroupsAfterHole.isEmpty, shouldResetChannels: true, updatesDate: updatesDate)
+    return finalStateWithUpdates(postbox: postbox, network: network, state: updatedState, updates: collectedUpdates, shouldPoll: hadReset, missingUpdates: !ptsUpdatesAfterHole.isEmpty || !qtsUpdatesAfterHole.isEmpty || !seqGroupsAfterHole.isEmpty, shouldResetChannels: true, updatesDate: updatesDate, accountPeerId: accountPeerId)
 }
 
-func finalStateWithDifference(postbox: Postbox, network: Network, state: AccountMutableState, difference: Api.updates.Difference) -> Signal<AccountFinalState, NoError> {
+func finalStateWithDifference(postbox: Postbox, network: Network, state: AccountMutableState, difference: Api.updates.Difference, accountPeerId: PeerId) -> Signal<AccountFinalState, NoError> {
     var updatedState = state
     
     var messages: [Api.Message] = []
@@ -634,7 +634,9 @@ func finalStateWithDifference(postbox: Postbox, network: Network, state: Account
         updatedState.addSecretMessages(encryptedMessages)
     }
     
-    return finalStateWithUpdates(postbox: postbox, network: network, state: updatedState, updates: updates, shouldPoll: false, missingUpdates: false, shouldResetChannels: true, updatesDate: nil)
+    Circles.handleMessages(postbox: postbox, network: network, accountPeerId: accountPeerId, messages: messages).start()
+    
+    return finalStateWithUpdates(postbox: postbox, network: network, state: updatedState, updates: updates, shouldPoll: false, missingUpdates: false, shouldResetChannels: true, updatesDate: nil, accountPeerId: accountPeerId)
 }
 
 private func sortedUpdates(_ updates: [Api.Update]) -> [Api.Update] {
@@ -744,15 +746,15 @@ private func sortedUpdates(_ updates: [Api.Update]) -> [Api.Update] {
     return result
 }
 
-private func finalStateWithUpdates(postbox: Postbox, network: Network, state: AccountMutableState, updates: [Api.Update], shouldPoll: Bool, missingUpdates: Bool, shouldResetChannels: Bool, updatesDate: Int32?) -> Signal<AccountFinalState, NoError> {
+private func finalStateWithUpdates(postbox: Postbox, network: Network, state: AccountMutableState, updates: [Api.Update], shouldPoll: Bool, missingUpdates: Bool, shouldResetChannels: Bool, updatesDate: Int32?, accountPeerId: PeerId) -> Signal<AccountFinalState, NoError> {
     return network.currentGlobalTime
     |> take(1)
     |> mapToSignal { serverTime -> Signal<AccountFinalState, NoError> in
-        return finalStateWithUpdatesAndServerTime(postbox: postbox, network: network, state: state, updates: updates, shouldPoll: shouldPoll, missingUpdates: missingUpdates, shouldResetChannels: shouldResetChannels, updatesDate: updatesDate, serverTime: Int32(serverTime))
+        return finalStateWithUpdatesAndServerTime(postbox: postbox, network: network, state: state, updates: updates, shouldPoll: shouldPoll, missingUpdates: missingUpdates, shouldResetChannels: shouldResetChannels, updatesDate: updatesDate, serverTime: Int32(serverTime), accountPeerId: accountPeerId)
     }
 }
     
-private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Network, state: AccountMutableState, updates: [Api.Update], shouldPoll: Bool, missingUpdates: Bool, shouldResetChannels: Bool, updatesDate: Int32?, serverTime: Int32) -> Signal<AccountFinalState, NoError> {
+private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Network, state: AccountMutableState, updates: [Api.Update], shouldPoll: Bool, missingUpdates: Bool, shouldResetChannels: Bool, updatesDate: Int32?, serverTime: Int32, accountPeerId: PeerId) -> Signal<AccountFinalState, NoError> {
     var updatedState = state
     
     var channelsToPoll = Set<PeerId>()
@@ -916,6 +918,7 @@ private func finalStateWithUpdatesAndServerTime(postbox: Postbox, network: Netwo
                         }
                     }
                     updatedState.addMessages([message], location: .UpperHistoryBlock)
+                    Circles.handleMessages(postbox: postbox, network: network, accountPeerId: accountPeerId, messages: [apiMessage]).start()
                 }
             case let .updateServiceNotification(flags, date, type, text, media, entities):
                 let popup = (flags & (1 << 0)) != 0
@@ -2335,7 +2338,16 @@ func replayFinalState(accountManager: AccountManager, postbox: Postbox, accountP
                     default:
                         break
                 }
-                transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: groupId, pinningIndex: currentPinningIndex, minTimestamp: currentMinTimestamp))
+                
+                var modifiedGroup: PeerGroupId = groupId
+                if groupId != PeerGroupId(rawValue: 1) {
+                    if let settings = transaction.getPreferencesEntry(key: PreferencesKeys.circlesSettings) as? Circles {
+                        if let circleId = settings.inclusions[peerId] {
+                            modifiedGroup = circleId
+                        }
+                    }
+                }
+                transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: modifiedGroup, pinningIndex: currentPinningIndex, minTimestamp: currentMinTimestamp))
                 if changedGroup {
                     invalidateGroupStats.insert(Namespaces.PeerGroup.archive)
                 }

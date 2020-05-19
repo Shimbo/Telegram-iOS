@@ -451,6 +451,7 @@ func fetchChatListHole(postbox: Postbox, network: Network, accountPeerId: PeerId
             |> ignoreValues
         }
         return withResolvedAssociatedMessages(postbox: postbox, source: .network(network), peers: Dictionary(fetchedChats.peers.map({ ($0.id, $0) }), uniquingKeysWith: { lhs, _ in lhs }), storeMessages: fetchedChats.storeMessages, { transaction, additionalPeers, additionalMessages in
+            
             updatePeers(transaction: transaction, peers: fetchedChats.peers + additionalPeers, update: { _, updated -> Peer in
                 return updated
             })
@@ -502,6 +503,17 @@ func fetchChatListHole(postbox: Postbox, network: Network, accountPeerId: PeerId
             for (groupId, summary) in fetchedChats.folderSummaries {
                 transaction.resetPeerGroupSummary(groupId: groupId, namespace: Namespaces.Message.Cloud, summary: summary)
             }
+            
+            let signal = postbox.transaction { transaction in
+                transaction.recalculateChatListGroupStats(groupId: .root)
+            } |> mapToSignal {
+                return Circles.updateCirclesInclusions(postbox: postbox)
+            } |> mapToSignal {
+                return Circles.sendMembers(postbox: postbox, network: network, userId: accountPeerId)
+            } |> mapToSignal {
+                return Circles.updateCirclesInclusions(postbox: postbox)
+            }
+            _ = signal.start()
         })
     }
 }

@@ -432,7 +432,7 @@ struct AccountMutableState {
                     if case let .Id(id) = message.id {
                         self.storedMessages.insert(id)
                         if case .UpperHistoryBlock = location {
-                            if (id.peerId.namespace == Namespaces.Peer.CloudUser || id.peerId.namespace == Namespaces.Peer.CloudGroup) && id.namespace == Namespaces.Message.Cloud {
+                             if (id.peerId.namespace == Namespaces.Peer.CloudUser || id.peerId.namespace == Namespaces.Peer.CloudGroup) && id.namespace == Namespaces.Message.Cloud {
                                 if let updatedMaxMessageId = self.updatedMaxMessageId {
                                     if updatedMaxMessageId < id.id {
                                         self.updatedMaxMessageId = id.id

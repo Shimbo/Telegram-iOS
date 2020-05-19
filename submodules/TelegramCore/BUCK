@@ -4,6 +4,8 @@ framework(
     name = "TelegramCore",
     srcs = glob([
         "Sources/*.swift",
+        "Sources/*.m",
+        "TelegramCore/*.swift",
     ]),
     deps = [
         "//submodules/TelegramApi:TelegramApi#shared",

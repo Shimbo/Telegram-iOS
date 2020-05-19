@@ -492,18 +492,20 @@ public final class ChatListNode: ListView {
     }
     
     private var hapticFeedback: HapticFeedback?
+    public var circleSettings: Circles?
     
     let preloadItems = Promise<[ChatHistoryPreloadItem]>([])
     
     var didBeginSelectingChats: (() -> Void)?
     
-    public init(context: AccountContext, groupId: PeerGroupId, chatListFilter: ChatListFilter? = nil, previewing: Bool, fillPreloadItems: Bool, mode: ChatListNodeMode, theme: PresentationTheme, fontSize: PresentationFontSize, strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat, nameSortOrder: PresentationPersonNameOrder, nameDisplayOrder: PresentationPersonNameOrder, disableAnimations: Bool) {
+    public init(context: AccountContext, groupId: PeerGroupId, chatListFilter: ChatListFilter? = nil, previewing: Bool, fillPreloadItems: Bool, mode: ChatListNodeMode, theme: PresentationTheme, fontSize: PresentationFontSize, strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat, nameSortOrder: PresentationPersonNameOrder, nameDisplayOrder: PresentationPersonNameOrder, disableAnimations: Bool, circleSettings: Circles? = nil) {
         self.context = context
         self.groupId = groupId
         self.chatListFilter = chatListFilter
         self.chatListFilterValue.set(.single(chatListFilter))
         self.fillPreloadItems = fillPreloadItems
         self.mode = mode
+        self.circleSettings = circleSettings
         
         var isSelecting = false
         if case .peers(_, true, _) = mode {
@@ -759,6 +761,8 @@ public final class ChatListNode: ListView {
                             
                             return true
                         }
+                case .GroupReferenceEntry(_, _, let groupId, _, _, _, _, _, _):
+                    return groupId == Namespaces.PeerGroup.archive
                     default:
                         return true
                 }

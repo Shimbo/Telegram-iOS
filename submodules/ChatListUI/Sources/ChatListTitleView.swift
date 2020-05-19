@@ -22,6 +22,8 @@ final class ChatListTitleView: UIView, NavigationBarTitleView, NavigationBarTitl
     private let proxyNode: ChatTitleProxyNode
     private let proxyButton: HighlightTrackingButton
     
+    private let circleArrowButton: UIButton
+    
     private var validLayout: (CGSize, CGRect)?
     
     var title: NetworkStatusTitle = NetworkStatusTitle(text: "", activity: false, hasProxy: false, connectsViaProxy: false, isPasscodeSet: false, isManuallyLocked: false) {
@@ -37,6 +39,7 @@ final class ChatListTitleView: UIView, NavigationBarTitleView, NavigationBarTitl
                 }
                 self.proxyNode.isHidden = !self.title.hasProxy
                 self.proxyButton.isHidden = !self.title.hasProxy
+//                self.circleArrowButton.isHidden = self.title.activity
                 
                 self.buttonView.isHidden = !self.title.isPasscodeSet
                 if self.title.isPasscodeSet && !self.title.activity {
@@ -60,7 +63,6 @@ final class ChatListTitleView: UIView, NavigationBarTitleView, NavigationBarTitl
     var theme: PresentationTheme {
         didSet {
             self.titleNode.attributedText = NSAttributedString(string: self.title.text, font: Font.bold(17.0), textColor: self.theme.rootController.navigationBar.primaryTextColor)
-            
             self.lockView.updateTheme(self.theme)
             
             self.activityIndicator.type = .custom(self.theme.rootController.navigationBar.primaryTextColor, 22.0, 1.5, false)
@@ -102,6 +104,11 @@ final class ChatListTitleView: UIView, NavigationBarTitleView, NavigationBarTitl
         self.proxyButton.accessibilityLabel = self.strings.VoiceOver_Navigation_ProxySettings
         self.proxyButton.accessibilityTraits = .button
         
+        circleArrowButton = UIButton()
+        circleArrowButton.setImage(UIImage(bundleImageName: "Chat/Input/Search/DownButton")?.withRenderingMode(.alwaysTemplate), for: .normal)
+        circleArrowButton.setImage(UIImage(bundleImageName: "Chat/Input/Search/UpButton")?.withRenderingMode(.alwaysTemplate), for: .selected)
+        circleArrowButton.imageView?.tintColor = .lightGray
+
         super.init(frame: CGRect())
         
         self.isAccessibilityElement = false
@@ -112,6 +119,8 @@ final class ChatListTitleView: UIView, NavigationBarTitleView, NavigationBarTitl
         self.addSubview(self.lockView)
         self.addSubview(self.buttonView)
         self.addSubview(self.proxyButton)
+        self.addSubview(self.circleArrowButton)
+        
         
         self.buttonView.highligthedChanged = { [weak self] highlighted in
             if let strongSelf = self {
@@ -134,6 +143,7 @@ final class ChatListTitleView: UIView, NavigationBarTitleView, NavigationBarTitl
         }
         
         self.buttonView.addTarget(self, action: #selector(self.buttonPressed), for: .touchUpInside)
+        circleArrowButton.addTarget(self, action: #selector(self.buttonPressed), for: .touchUpInside)
         
         self.proxyButton.highligthedChanged = { [weak self] highlighted in
             if let strongSelf = self {
@@ -148,7 +158,6 @@ final class ChatListTitleView: UIView, NavigationBarTitleView, NavigationBarTitl
                 }
             }
         }
-        
         self.proxyButton.addTarget(self, action: #selector(self.proxyButtonPressed), for: .touchUpInside)
     }
     
@@ -205,6 +214,8 @@ final class ChatListTitleView: UIView, NavigationBarTitleView, NavigationBarTitl
         self.lockView.frame = CGRect(x: titleFrame.maxX + 6.0, y: titleFrame.minY + 2.0, width: 2.0, height: 2.0)
         
         self.activityIndicator.frame = CGRect(origin: CGPoint(x: titleFrame.minX - indicatorSize.width - 4.0, y: titleFrame.minY - 1.0), size: indicatorSize)
+        
+        circleArrowButton.frame = CGRect(origin: CGPoint(x: titleFrame.maxX + 4.0, y: titleFrame.minY - 1.0), size: indicatorSize)
     }
     
     @objc private func buttonPressed() {

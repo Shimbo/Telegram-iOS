@@ -22,17 +22,21 @@ public struct PeerGroupUnreadCounters: PostboxCoding, Equatable {
 
 public struct PeerGroupUnreadCountersSummary: PostboxCoding, Equatable {
     public var all: PeerGroupUnreadCounters
+    public var filtered: PeerGroupUnreadCounters
     
-    public init(all: PeerGroupUnreadCounters) {
+    public init(all: PeerGroupUnreadCounters, filtered: PeerGroupUnreadCounters) {
         self.all = all
+        self.filtered = filtered
     }
     
     public init(decoder: PostboxDecoder) {
         self.all = decoder.decodeObjectForKey("a", decoder: { PeerGroupUnreadCounters(decoder: $0) }) as! PeerGroupUnreadCounters
+        self.filtered = decoder.decodeObjectForKey("f", decoder: { PeerGroupUnreadCounters(decoder: $0) }) as! PeerGroupUnreadCounters
     }
     
     public func encode(_ encoder: PostboxEncoder) {
         encoder.encodeObject(self.all, forKey: "a")
+        encoder.encodeObject(self.filtered, forKey: "f")
     }
 }
 
@@ -44,6 +48,7 @@ public struct PeerGroupUnreadCountersCombinedSummary: PostboxCoding, Equatable {
     
     public enum MuteCategory {
         case all
+        case filtered
     }
     
     public var namespaces: [MessageId.Namespace: PeerGroupUnreadCountersSummary]
@@ -71,6 +76,13 @@ public struct PeerGroupUnreadCountersCombinedSummary: PostboxCoding, Equatable {
                         case .messages:
                             result = result &+ summary.all.messageCount
                     }
+                case .filtered:
+                switch countingCategory {
+                    case .chats:
+                        result = result &+ summary.filtered.chatCount
+                    case .messages:
+                        result = result &+ summary.filtered.messageCount
+                }
             }
         }
         return result

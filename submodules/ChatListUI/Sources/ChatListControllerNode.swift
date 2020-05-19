@@ -1002,7 +1002,7 @@ final class ChatListControllerNode: ASDisplayNode {
 
     let debugListView = ListView()
     
-    init(context: AccountContext, groupId: PeerGroupId, filter: ChatListFilter?, previewing: Bool, controlsHistoryPreload: Bool, presentationData: PresentationData, controller: ChatListControllerImpl) {
+    init(context: AccountContext, groupId: PeerGroupId, filter: ChatListFilter?, previewing: Bool, controlsHistoryPreload: Bool, presentationData: PresentationData, controller: ChatListControllerImpl, circlesSettings: Circles? = nil) {
         self.context = context
         self.groupId = groupId
         self.presentationData = presentationData

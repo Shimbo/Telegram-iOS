@@ -43,6 +43,7 @@ def merge_dict(a, b):
 DEVELOPMENT_LANGUAGE = "en"
 
 SHARED_CONFIGS = {
+    "DEAD_CODE_STRIPPING": "YES",
     "IPHONEOS_DEPLOYMENT_TARGET": "9.0",
     "SDKROOT": "iphoneos",
     "GCC_OPTIMIZATION_LEVEL": "0",

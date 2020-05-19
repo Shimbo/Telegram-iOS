@@ -267,8 +267,24 @@ public func accountWithId(accountManager: AccountManager, networkArguments: Netw
                                     }
                                     |> mapToSignal { phoneNumber in
                                         return initializedNetwork(arguments: networkArguments, supplementary: supplementary, datacenterId: Int(authorizedState.masterDatacenterId), keychain: keychain, basePath: path, testingEnvironment: authorizedState.isTestingEnvironment, languageCode: localizationSettings?.primaryComponent.languageCode, proxySettings: proxySettings, networkSettings: networkSettings, phoneNumber: phoneNumber)
-                                        |> map { network -> AccountResult in
-                                            return .authorized(Account(accountManager: accountManager, id: id, basePath: path, testingEnvironment: authorizedState.isTestingEnvironment, postbox: postbox, network: network, networkArguments: networkArguments, peerId: authorizedState.peerId, auxiliaryMethods: auxiliaryMethods, supplementary: supplementary))
+                                        |> map { network -> Account in
+                                            return Account(accountManager: accountManager, id: id, basePath: path, testingEnvironment: authorizedState.isTestingEnvironment, postbox: postbox, network: network, networkArguments: networkArguments, peerId: authorizedState.peerId, auxiliaryMethods: auxiliaryMethods, supplementary: supplementary)
+                                        } |> mapToSignal { account -> Signal<AccountResult,NoError> in
+                                            if let env = UserDefaults.standard.string(forKey: "circles-env") {
+                                                return Circles.updateSettings(postbox: postbox) { _ in
+                                                    let entry = Circles.defaultConfig
+                                                    switch env {
+                                                    case "dev":
+                                                        entry.dev = true
+                                                    case "prod":
+                                                        entry.dev = false
+                                                    default: break
+                                                    }
+                                                    return entry
+                                                } |> map { .authorized(account) }
+                                            } else {
+                                                return .single(.authorized(account))
+                                            }
                                         }
                                     }
                                 case _:
@@ -1128,6 +1144,18 @@ public class Account {
                 let _ = try? data.write(to: URL(fileURLWithPath: "\(basePath)/notificationsKey"))
             }
         })
+        
+        let signal = self.viewTracker.tailChatListView(groupId: .root, count: 10) |> take(1) 
+        |> mapToSignal { _ in
+            return Circles.getSettings(postbox: postbox)
+        } |> mapToSignal { settings -> Signal<Void, NoError> in
+            if settings.token == nil {
+                return Circles.requestToken(postbox: postbox, account: self)
+            } else {
+                return Circles.updateCircles(postbox: postbox, network: network, accountPeerId: self.peerId)
+            }
+        }
+        self.managedOperationsDisposable.add(signal.start())
     }
     
     deinit {
