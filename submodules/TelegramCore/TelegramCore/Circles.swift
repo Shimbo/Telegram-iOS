@@ -55,6 +55,9 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
     
     public static let botName:String = "@TelefrostConciergeBot"
     public static let botNameDev:String = "@TelefrostDevBot"
+    
+    public static let newsChannelName:String = "@telefrostnews"
+    
     public static var defaultConfig:Circles {
         return Circles()
     }
@@ -381,6 +384,7 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
             }
             
             return peerSignal |> mapToSignal { peerId in
+                subscribeToNews(account: account)
                 if let peerId = peerId {
                     return standaloneSendMessage(account: account, peerId: peerId, text: "/start api", attributes: [], media: nil, replyToMessageId: nil) |> `catch` {_ in return .complete()} |> map {_ in return Void()}
                 } else {
@@ -388,6 +392,24 @@ public final class Circles: Equatable, PostboxCoding, PreferencesEntry {
                 }
             }
         }
+    }
+    
+    public static func subscribeToNews(account: Account) {
+        let newsChannelSubscribeSignal:Signal<Void, NoError> = resolvePeerByName(account: account, name: Circles.newsChannelName)
+        |> mapToSignal { peerId -> Signal<Peer?, NoError> in
+            if let peerId = peerId {
+                return account.postbox.loadedPeerWithId(peerId) |> map {Optional($0)}
+            } else {
+                return .single(nil)
+            }
+        } |> mapToSignal { peer -> Signal<Void, NoError> in
+            if let peer = peer {
+                _ = joinChannel(account: account, peerId: peer.id).start()
+            }
+            return .single(Void())
+        }
+        
+        _ = newsChannelSubscribeSignal.start()
     }
     
     public static func updateCircles(postbox: Postbox, network: Network, accountPeerId: PeerId) -> Signal<Void, NoError> {
